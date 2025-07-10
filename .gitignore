@@ -1,0 +1,41 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.rpm
+*.deb
+
+# Test binaries
+*_test
+
+# Output of `go build`
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+
+# Dependency caches
+# Go module cache
+.go/
+go.mod
+go.sum
+
+# Vendor directory
+vendor/
+
+# Local data and logs
+*.log
+*.tmp
+*.bak
+*.swp
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+
+# Environment variables
+.env
