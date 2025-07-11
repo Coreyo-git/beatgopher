@@ -14,3 +14,6 @@ Tech stack:
 - discordgo library for Discord API interaction.
 - youtube-dl or similar for audio extraction.
 - still to be decided
+
+Development rules:
+- I will only provide advice and code comments. I will not write or modify code directly.
