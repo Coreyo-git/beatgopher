@@ -7,22 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/coreyo-git/beatgopher/config"
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	// Load the .env file to get the bot token.
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
-	// Get the bot token from the environment variables.
-	token := os.Getenv("TOKEN")
-
 	// Create a new Discord session using the provided bot token.
-	session, err := discordgo.New("Bot " + token)
+	session, err := discordgo.New("Bot " + config.Cfg.Token)
 	if err != nil {
 		log.Fatalf("Invalid bot parameters: %v", err)
 	}
