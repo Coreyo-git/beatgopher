@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/coreyo-git/beatgopher/commands"
 	"github.com/coreyo-git/beatgopher/config"
 
 	"github.com/bwmarrin/discordgo"
@@ -19,14 +20,16 @@ func main() {
 		log.Fatalf("Invalid bot parameters: %v", err)
 	}
 
-	// Add a handler for the messageCreate event.
-	// This function will be called every time a new message is created on any channel that the authenticated user has access to.
-	// TODO: Give it a configurable channel scope or maybe just give it permission for one music channel??
-	session.AddHandler(messageCreate)
+	// Add a handler for interactions e.g.. /play
+	session.AddHandler(interactionCreate)
 
 	// messages and voice states.
 	// https://discord.com/developers/docs/topics/gateway#gateway-intents
 	session.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentsGuildVoiceStates
+
+	// This function will be called once the bot is connected and ready.
+	// It will also call registerCommands function
+	session.AddHandler(onReady)
 
 	// Open a websocket connection to Discord.
 	err = session.Open()
@@ -44,15 +47,29 @@ func main() {
 	session.Close()
 }
 
-// messageCreate will be called every time a new message is created.
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore all messages created by the bot itself
-	if m.Author.ID == s.State.User.ID {
-		return
+// interactionCreate will be called every time a new interaction is created.
+func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Check interaction type
+	if i.Type == discordgo.InteractionApplicationCommand {
+		// Look for command with matching name in registry
+		if cmd, ok := commands.Commands[i.ApplicationCommandData().Name]; ok {
+			// if exists call relative handler
+			cmd.Handler(s, i)
+		}
 	}
+}
 
-	// Bast test setup response
-	if m.Content == "hello" {
-		s.ChannelMessageSend(m.ChannelID, "world!")
+func onReady(s *discordgo.Session, event *discordgo.Ready) {
+  log.Println("Registering commands...")
+  registerCommands(s)
+}
+
+// Iterates over command registry adding each command
+func registerCommands(s *discordgo.Session) {
+	for _, cmd := range commands.Commands {
+		_, err := s.ApplicationCommandCreate(s.State.User.ID, "", cmd.Definition)
+		if err != nil {
+			log.Fatalf("Cannot create slash command '%s': %v", cmd.Definition.Name, err)
+		}
 	}
 }
