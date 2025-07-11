@@ -9,7 +9,6 @@ import (
 // Config holds all configuration for the application.
 type Config struct {
 	Token 	string `json:"token"`
-	Prefix 	string `json:"prefix"`
 }
 
 // Cfg is a global/package-level variable that holds the loaded configuration.
@@ -27,15 +26,8 @@ func init() {
 		log.Fatal("TOKEN environment variable not set.")
 	}
 
-	prefix := os.Getenv("PREFIX")
-	if prefix == "" {
-		log.Println("PREFIX environment variable not set, using default '!'.")
-		prefix = "!"
-	}
-
     // Cfg is initialized with the loaded configuration values.
 	Cfg = &Config{
 		Token: token,
-		Prefix: prefix,
 	}
 }
