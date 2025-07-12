@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/coreyo-git/beatgopher/commands"
-	"github.com/coreyo-git/beatgopher/config"
+	"github.com/coreyo-git/beatgopher/src/commands"
+	"github.com/coreyo-git/beatgopher/src/config"
 
 	"github.com/bwmarrin/discordgo"
 )
