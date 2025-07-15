@@ -23,7 +23,7 @@ FROM alpine:latest
 
 # Install runtime deps.
 # ca-certificates is needed for making HTTPS reqs.
-RUN apk add --no-cache ca-certificates ffmpeg curl
+RUN apk add --no-cache ca-certificates ffmpeg curl python3
 
 # yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
