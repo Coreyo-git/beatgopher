@@ -18,8 +18,6 @@
 # Dependency caches
 # Go module cache
 .go/
-go.mod
-go.sum
 
 # Vendor directory
 vendor/
