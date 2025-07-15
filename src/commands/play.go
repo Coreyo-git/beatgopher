@@ -5,6 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"log"
 	"net/url"
+	"github.com/coreyo-git/beatgopher/src/services"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -77,13 +78,15 @@ func handleURL(s *discordgo.Session, i *discordgo.InteractionCreate, query strin
 
 // called when the user's query is a song name
 func handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate, query string) {
-	_, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-		Content: fmt.Sprintf("Searching for: `%s`", query),
-	})
-
+	results, err := services.SearchYoutube(query)
 	if err != nil {
 		log.Panicf("Error during handleSearch: %v", err)
 	}
+	fmt.Println(results)
+	
+	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Content: fmt.Sprintf("Searching for: `%s`", query),
+	})
 }
 
 // checks if a string is a valid URL.
