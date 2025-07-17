@@ -5,7 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"log"
 	"net/url"
-	"github.com/coreyo-git/beatgopher/src/services"
+	"github.com/coreyo-git/beatgopher/services"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
