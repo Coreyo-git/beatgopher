@@ -2,13 +2,16 @@ package commands
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"log"
 	"net/url"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/coreyo-git/beatgopher/discord"
 	"github.com/coreyo-git/beatgopher/services"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ds := discord.NewSession(s)
 	var query string
 
 	// Access options in the order provided by the user.
@@ -24,24 +27,25 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 
 	// Acknowledge command and reply to avoid timeout.
-	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Received your request for `%s`!", query),
-		},
-	})
+	err := ds.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
 
 	if err != nil {
-		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: "Something went wrong while trying to respond.",
-		})
+		ds.InteractionRespond(i.Interaction, "Something went wrong while trying to respond.")
 		log.Printf("Error responding to interaction: %v", err)
 	}
 
+	// Join the voice channel of the user who sent the command.
+	_, err = ds.JoinVoiceChannel(i)
+	if err != nil {
+		ds.FollowupMessage(i.Interaction, "Error joining voice channel")
+		log.Printf("Error joining voice channel: %v", err)
+		return
+	}
+
 	if isValidURL(query) {
-		handleURL(s, i, query)
+		handleURL(ds, i, query)
 	} else {
-		handleSearch(s, i, query)
+		handleSearch(ds, i, query)
 	}
 }
 
@@ -66,10 +70,8 @@ func init() {
 }
 
 // Called when the user's query is a URL.
-func handleURL(s *discordgo.Session, i *discordgo.InteractionCreate, query string) {
-	_, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-		Content: fmt.Sprintf("Getting song from: `%s`", query),
-	})
+func handleURL(ds *discord.Session, i *discordgo.InteractionCreate, query string) {
+	err := ds.FollowupMessage(i.Interaction, fmt.Sprintf("Getting song from: `%s`", query))
 
 	if err != nil {
 		log.Panicf("Error during handleURL: %v", err)
@@ -77,7 +79,7 @@ func handleURL(s *discordgo.Session, i *discordgo.InteractionCreate, query strin
 }
 
 // called when the user's query is a song name
-func handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate, query string) {
+func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) {
 	result, err := services.SearchYoutube(query)
 	if err != nil {
 		log.Panicf("Error during handleSearch: %v", err)
@@ -85,9 +87,7 @@ func handleSearch(s *discordgo.Session, i *discordgo.InteractionCreate, query st
 
 	// TODO: do something with the result
 
-	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-		Content: fmt.Sprintf("Found song: `%s`", result.URL),
-	})
+	ds.FollowupMessage(i.Interaction, fmt.Sprintf("Found song: `%s`", result.URL))
 }
 
 // checks if a string is a valid URL.
