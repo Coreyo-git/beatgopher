@@ -113,3 +113,55 @@ func isValidURL(s string) bool {
 	_, err := url.ParseRequestURI(s)
 	return err == nil
 }
+
+func playStream(vc *discordgo.VoiceConnection, stream io.ReadCloser) {
+
+	if !vc.Ready {
+		time.Sleep(1* time.Millisecond)
+	}
+
+	vc.Speaking(true)
+
+	defer vc.Speaking(false)
+	const (
+		channels int = 2
+		frameRate int = 48000
+		frameSize int = 960
+		maxBytes int = 1275
+	)
+
+	encoder, err := gopus.NewEncoder(frameRate, channels, gopus.Audio)
+	if err != nil {
+		log.Printf("Error creating Opus encoder: %v", err)
+		return
+	}
+
+	// Reads raw PCM data from the stream
+	pcm := make([]int16, frameSize*channels)
+	for {
+		// read full frame 
+		err := binary.Read(stream, binary.LittleEndian, &pcm)
+		if err != nil {
+			// if stream end io.eof will be returned
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				log.Println("Stream Finished.")
+				return // end
+			}
+			log.Printf("Error reading from ffmpeg stream: %v", err)
+			return
+		}
+
+		// Encode the PCM data into an Opus packet.
+		opus, err := encoder.Encode(pcm, frameSize, maxBytes)
+		if err != nil {
+			log.Printf("Error encoding audio to opus: %v", err)
+			return
+		}
+		select {
+		case vc.OpusSend <- opus:
+		case <- time.After(2* time.Second):
+			log.Println("Timeout sending opus packet, disconnecting.")
+			return
+		}
+	}
+}
