@@ -27,6 +27,7 @@ vendor/
 *.tmp
 *.bak
 *.swp
+tmp/
 
 # IDE and editor specific files
 .idea/

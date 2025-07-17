@@ -1,0 +1,13 @@
+services:
+  dev:
+    container_name: beatgopher-dev
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+      - ~/.cache/go-build:/root/.cache/go-build
+    env_file:
+      - .env
+    working_dir: /app
+    command: ["air"]

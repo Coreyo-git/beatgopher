@@ -1,8 +1,18 @@
 # ---- Builder ----
 FROM golang:1.24-alpine AS builder
 
-# needed to fetch Go modules.
-RUN apk add --no-cache git
+# Install runtime deps.
+# ca-certificates is needed for making HTTPS reqs.
+# python3 is needed for yt-dlp.
+# git is needed for golang modules
+RUN apk add --no-cache ca-certificates ffmpeg curl python3 git
+
+# yt-dlp download.
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp
+
+# Install air
+RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
 
@@ -16,7 +26,7 @@ COPY . .
 # Build
 # CGO self container binary
 # ldflags makes the binary file smaller
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /beatgopher ./src/main.go
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /beatgopher ./main.go
 
 # ---- Final ----
 FROM alpine:latest

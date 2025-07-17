@@ -1,0 +1,26 @@
+# Config file for Air - https://github.com/air-verse/air
+#
+# Create a `air.toml` file in your project root to configure Air.
+
+# The root directory of your project. Defaults to the current directory.
+root = "."
+
+# The directory where the temporary files are stored. Defaults to `tmp`.
+tmp_dir = "tmp"
+
+[build]
+# The command to build your application.
+cmd = "go build -buildvcs=false -o ./tmp/beatgopher main.go"
+
+# The binary file to run.
+bin = "tmp/beatgopher"
+
+# The extensions of the files to watch.
+include_ext = ["go"]
+
+# The directories to exclude from watching.
+exclude_dir = ["tmp"]
+
+[misc]
+# Clean the temporary directory on exit.
+clean_on_exit = true
