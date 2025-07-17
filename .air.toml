@@ -10,7 +10,7 @@ tmp_dir = "tmp"
 
 [build]
 # The command to build your application.
-cmd = "go build -buildvcs=false -o ./tmp/beatgopher main.go"
+cmd = "CGO_ENABLED=1 go build -buildvcs=false -o ./tmp/beatgopher main.go"
 
 # The binary file to run.
 bin = "tmp/beatgopher"

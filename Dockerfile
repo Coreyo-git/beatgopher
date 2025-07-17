@@ -6,6 +6,7 @@ FROM golang:1.24-alpine AS builder
 # python3 is needed for yt-dlp.
 # git is needed for golang modules
 RUN apk add --no-cache ca-certificates ffmpeg curl python3 git
+RUN apk add --no-cache opus-dev build-base gcc
 
 # yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
@@ -26,7 +27,7 @@ COPY . .
 # Build
 # CGO self container binary
 # ldflags makes the binary file smaller
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /beatgopher ./main.go
+RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /beatgopher ./main.go
 
 # ---- Final ----
 FROM alpine:latest
