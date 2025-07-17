@@ -1,13 +1,17 @@
 package commands
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
 	"github.com/coreyo-git/beatgopher/services"
+	"layeh.com/gopus"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -35,18 +39,22 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	// Join the voice channel of the user who sent the command.
-	_, err = ds.JoinVoiceChannel(i)
+	vc, err := ds.JoinVoiceChannel(i)
+
 	if err != nil {
 		ds.FollowupMessage(i.Interaction, "Error joining voice channel")
 		log.Printf("Error joining voice channel: %v", err)
 		return
 	}
 
-	if isValidURL(query) {
-		handleURL(ds, i, query)
-	} else {
-		handleSearch(ds, i, query)
+	// Handles the search and gets the piped out audio stream
+	stdoutStream, err := handleSearch(ds, i, query)
+
+	if err != nil {
+		return
 	}
+
+	go playStream(vc, stdoutStream)
 }
 
 func init() {
@@ -70,24 +78,34 @@ func init() {
 }
 
 // Called when the user's query is a URL.
-func handleURL(ds *discord.Session, i *discordgo.InteractionCreate, query string) {
-	err := ds.FollowupMessage(i.Interaction, fmt.Sprintf("Getting song from: `%s`", query))
+func setupAudioOutput(ds *discord.Session, i *discordgo.InteractionCreate, result services.YoutubeResult) (io.ReadCloser, error) {
+	ds.FollowupMessage(i.Interaction, fmt.Sprintf("Getting song from: `%s`", result.Title))
 
+	stdout, err := services.GetAudioStream(result.URL)
 	if err != nil {
-		log.Panicf("Error during handleURL: %v", err)
+		return nil, err
 	}
+
+	return stdout, err
 }
 
 // called when the user's query is a song name
-func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) {
-	result, err := services.SearchYoutube(query)
-	if err != nil {
-		log.Panicf("Error during handleSearch: %v", err)
+func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) (io.ReadCloser, error) {
+	if isValidURL(query){
+		result, err := services.GetYoutubeInfo(query)
+		if(err) != nil {
+			return nil, err
+		}
+		return setupAudioOutput(ds, i, result)
 	}
 
-	// TODO: do something with the result
+	result, err := services.SearchYoutube(query)
 
-	ds.FollowupMessage(i.Interaction, fmt.Sprintf("Found song: `%s`", result.URL))
+	if err != nil {
+		return nil, err
+	}
+
+	return setupAudioOutput(ds, i, result)
 }
 
 // checks if a string is a valid URL.
