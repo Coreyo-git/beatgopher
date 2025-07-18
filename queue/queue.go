@@ -12,6 +12,13 @@ type Queue struct {
 	songs []*services.YoutubeResult
 }
 
+func NewQueue() *Queue {
+	return &Queue{
+		mu:    sync.Mutex{},
+		songs: []*services.YoutubeResult{},
+	}
+}
+
 func (q *Queue) Enqueue(song *services.YoutubeResult) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
