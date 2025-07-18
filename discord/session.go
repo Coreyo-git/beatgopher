@@ -49,6 +49,7 @@ func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) (*discordgo.V
 	// Join the user's voice channel.
 	vc, err := s.ChannelVoiceJoin(i.GuildID, vs.ChannelID, false, true)
 	if err != nil {
+		s.FollowupMessage(i.Interaction, "Error joining voice channel")
 		return nil, fmt.Errorf("could not join voice channel: %w", err)
 	}
 
