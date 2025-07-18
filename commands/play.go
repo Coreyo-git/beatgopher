@@ -1,21 +1,20 @@
 package commands
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
 	"github.com/coreyo-git/beatgopher/services"
-	"layeh.com/gopus"
+	"github.com/coreyo-git/beatgopher/player"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	ds := discord.NewSession(s)
+	p := player.GetOrCreatePlayer(i.GuildID, ds)
+
 	var query string
 
 	// Access options in the order provided by the user.
@@ -38,23 +37,14 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		log.Printf("Error responding to interaction: %v", err)
 	}
 
-	// Join the voice channel of the user who sent the command.
-	vc, err := ds.JoinVoiceChannel(i)
-
-	if err != nil {
-		ds.FollowupMessage(i.Interaction, "Error joining voice channel")
-		log.Printf("Error joining voice channel: %v", err)
-		return
-	}
-
 	// Handles the search and gets the piped out audio stream
-	stdoutStream, err := handleSearch(ds, i, query)
+	song, err := handleSearch(ds, i, query)
 
 	if err != nil {
 		return
-	}
+	} 
 
-	go playStream(vc, stdoutStream)
+	p.AddSong(i, p, &song)
 }
 
 func init() {
@@ -77,35 +67,25 @@ func init() {
 	}
 }
 
-// Called when the user's query is a URL.
-func setupAudioOutput(ds *discord.Session, i *discordgo.InteractionCreate, result services.YoutubeResult) (io.ReadCloser, error) {
-	ds.FollowupMessage(i.Interaction, fmt.Sprintf("Getting song from: `%s`", result.Title))
 
-	stdout, err := services.GetAudioStream(result.URL)
-	if err != nil {
-		return nil, err
-	}
-
-	return stdout, err
-}
 
 // called when the user's query is a song name
-func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) (io.ReadCloser, error) {
+func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) (services.YoutubeResult, error) {
 	if isValidURL(query){
 		result, err := services.GetYoutubeInfo(query)
 		if(err) != nil {
-			return nil, err
+			return services.YoutubeResult{}, err
 		}
-		return setupAudioOutput(ds, i, result)
+		return result, nil
 	}
 
 	result, err := services.SearchYoutube(query)
 
 	if err != nil {
-		return nil, err
+		return services.YoutubeResult{}, err
 	}
 
-	return setupAudioOutput(ds, i, result)
+	return result, nil
 }
 
 // checks if a string is a valid URL.
@@ -114,54 +94,4 @@ func isValidURL(s string) bool {
 	return err == nil
 }
 
-func playStream(vc *discordgo.VoiceConnection, stream io.ReadCloser) {
 
-	if !vc.Ready {
-		time.Sleep(1* time.Millisecond)
-	}
-
-	vc.Speaking(true)
-
-	defer vc.Speaking(false)
-	const (
-		channels int = 2
-		frameRate int = 48000
-		frameSize int = 960
-		maxBytes int = 1275
-	)
-
-	encoder, err := gopus.NewEncoder(frameRate, channels, gopus.Audio)
-	if err != nil {
-		log.Printf("Error creating Opus encoder: %v", err)
-		return
-	}
-
-	// Reads raw PCM data from the stream
-	pcm := make([]int16, frameSize*channels)
-	for {
-		// read full frame 
-		err := binary.Read(stream, binary.LittleEndian, &pcm)
-		if err != nil {
-			// if stream end io.eof will be returned
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Stream Finished.")
-				return // end
-			}
-			log.Printf("Error reading from ffmpeg stream: %v", err)
-			return
-		}
-
-		// Encode the PCM data into an Opus packet.
-		opus, err := encoder.Encode(pcm, frameSize, maxBytes)
-		if err != nil {
-			log.Printf("Error encoding audio to opus: %v", err)
-			return
-		}
-		select {
-		case vc.OpusSend <- opus:
-		case <- time.After(2* time.Second):
-			log.Println("Timeout sending opus packet, disconnecting.")
-			return
-		}
-	}
-}
