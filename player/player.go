@@ -23,7 +23,10 @@ type Player struct {
 	mu sync.Mutex
 }
 
-var players = make(map[string]*Player)
+var (
+	playersMutex sync.Mutex 
+	players = make(map[string]*Player) 
+)
 
  // NewSession creates a new Session wrapper.
  func NewPlayer(guildID string, ds *discord.Session) *Player {
@@ -37,6 +40,8 @@ var players = make(map[string]*Player)
 }
 
 func GetOrCreatePlayer(guildID string, ds *discord.Session) *Player {
+	playersMutex.Lock()
+	defer playersMutex.Unlock()
 	player, exists := players[guildID]
 	if !exists {
 		player = NewPlayer(guildID, ds)
