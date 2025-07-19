@@ -44,7 +44,7 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	} 
 
-	p.AddSong(i, p, &song)
+	p.AddSong(i, &song)
 }
 
 func init() {

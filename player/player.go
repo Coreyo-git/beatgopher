@@ -46,7 +46,7 @@ func GetOrCreatePlayer(guildID string, ds *discord.Session) *Player {
 	return player
 }
 
-func (*Player) AddSong(i *discordgo.InteractionCreate, player *Player, song *services.YoutubeResult) {
+func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	player.Queue.Enqueue(song)
 
 	player.mu.Lock()
@@ -79,14 +79,14 @@ func handlePlaybackLoop(i *discordgo.InteractionCreate, guild string) {
 			log.Printf("Error in setupAudioOutput: %v", err)
 		}
 
-		Stream(i, stdout, player)
+		stream(i, stdout, player)
 	}
 	player.mu.Lock()
 	player.IsPlaying = false
 	player.mu.Unlock()
 }
 
-func Stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
+func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	// Join the voice channel of the user who sent the command.
 	vc, err := p.Session.JoinVoiceChannel(i)
 
