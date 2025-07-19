@@ -6,7 +6,6 @@ import (
 	"log"
 	"sync"
 	"time"
-	"fmt"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
@@ -20,6 +19,7 @@ type Player struct {
 	Session *discord.Session
 	IsPlaying bool
 	GuildID string
+	ChannelID string
 	mu sync.Mutex
 }
 
@@ -29,22 +29,23 @@ var (
 )
 
  // NewSession creates a new Session wrapper.
- func NewPlayer(guildID string, ds *discord.Session) *Player {
+ func NewPlayer(guildID string, ds *discord.Session, channelID string) *Player {
 	return &Player{
 		Queue: queue.NewQueue(),
 		Session: ds,
 		IsPlaying: false,
 		GuildID: guildID,
+		ChannelID: channelID,
 		mu: sync.Mutex{},
 	}
 }
 
-func GetOrCreatePlayer(guildID string, ds *discord.Session) *Player {
+func GetOrCreatePlayer(guildID string, ds *discord.Session, channelID string) *Player {
 	playersMutex.Lock()
 	defer playersMutex.Unlock()
 	player, exists := players[guildID]
 	if !exists {
-		player = NewPlayer(guildID, ds)
+		player = NewPlayer(guildID, ds, channelID)
 		players[guildID] = player
 	} 
 	
@@ -65,19 +66,19 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 
 		go handlePlaybackLoop(i, player.GuildID)
 	} else {
-		player.Session.FollowupMessage(i.Interaction, fmt.Sprintf("Added song to queue: %v", song.Title))
+		player.Session.SendSongEmbed(player.ChannelID, song, "Queued to play.")
 	}
 } 
 
 func handlePlaybackLoop(i *discordgo.InteractionCreate, guild string) {
-	player := GetOrCreatePlayer(guild, nil)
+	player := GetOrCreatePlayer(guild, nil, "")
 
 	for {
 		song := player.Queue.Dequeue()
 		if song == nil {
 			break
 		}
-		player.Session.FollowupMessage(i.Interaction, fmt.Sprintf("Playing song: %v", song.Title))
+		player.Session.SendSongEmbed(player.ChannelID, song, "Playing!")
 
 		stdout, err := setupAudioOutput(song)
 		if err != nil {
