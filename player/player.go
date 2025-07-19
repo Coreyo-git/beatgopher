@@ -64,32 +64,30 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 		player.IsPlaying = true
 		player.mu.Unlock()
 
-		go handlePlaybackLoop(i, player.GuildID)
+		go player.handlePlaybackLoop(i)
 	} else {
 		player.Session.SendSongEmbed(player.ChannelID, song, "Queued to play.")
 	}
 } 
 
-func handlePlaybackLoop(i *discordgo.InteractionCreate, guild string) {
-	player := GetOrCreatePlayer(guild, nil, "")
-
+func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 	for {
-		song := player.Queue.Dequeue()
+		song := p.Queue.Dequeue()
 		if song == nil {
 			break
 		}
-		player.Session.SendSongEmbed(player.ChannelID, song, "Playing!")
+		p.Session.SendSongEmbed(p.ChannelID, song, "Playing!")
 
 		stdout, err := setupAudioOutput(song)
 		if err != nil {
 			log.Printf("Error in setupAudioOutput: %v", err)
 		}
 
-		stream(i, stdout, player)
+		stream(i, stdout, p)
 	}
-	player.mu.Lock()
-	player.IsPlaying = false
-	player.mu.Unlock()
+	p.mu.Lock()
+	p.IsPlaying = false
+	p.mu.Unlock()
 }
 
 func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
