@@ -82,6 +82,8 @@ func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query str
 	result, err := services.SearchYoutube(query)
 
 	if err != nil {
+		log.Printf("Error handling search: %v", err)
+		ds.FollowupMessage(i.Interaction, "Sorry, I couldn't find that song or process the URL.")
 		return services.YoutubeResult{}, err
 	}
 
