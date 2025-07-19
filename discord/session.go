@@ -1,8 +1,10 @@
 package discord
 
 import (
-"fmt"
-"github.com/bwmarrin/discordgo"
+	"fmt"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/coreyo-git/beatgopher/services"
 )
 
 // Session provides helper methods for interacting with the Discord API.
@@ -31,6 +33,35 @@ func (s *Session) FollowupMessage(i *discordgo.Interaction, content string) erro
 		Content: content,
 	})
 	return err
+}
+
+func (s *Session) SendChannelMessage(channelID string, message string) error {
+	_, err := s.ChannelMessageSend(channelID, message)
+	if err != nil {
+		return fmt.Errorf("error sending channel message: %v", err)
+	}
+	return nil
+}
+
+func (s *Session) SendSongEmbed(channelID string, song *services.YoutubeResult, footer string) error {
+	embed := &discordgo.MessageEmbed{
+		Title:       song.Title,
+		URL:         song.URL,
+		Description: fmt.Sprintf("Channel: **%s**\nDuration: `%s`", song.Channel, song.Duration),
+		Color:       0x1DB954, // Spotify green, or choose any hex color
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: song.Thumbnail,
+		},
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: footer,
+		},
+	}
+
+	_, err := s.ChannelMessageSendEmbed(channelID, embed)
+	if err != nil {
+		return fmt.Errorf("error sending song embed: %v", err)
+	}
+	return nil
 }
  
 // JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
