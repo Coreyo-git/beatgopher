@@ -150,13 +150,28 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 
 // Called when the user's query is a URL.
 func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
+	// Consumer/Producer pipe to buffer to stream
+	pipeReader, pipeWriter := io.Pipe()
 
-	stdout, err := services.GetAudioStream(result.URL)
-	if err != nil {
-		return nil, err
-	}
+	// go routine producing data from ffmpeg and filling the pipe
+	go func() {
+		defer pipeWriter.Close()
 
-	return stdout, err
+		stdout, err := services.GetAudioStream(result.URL)
+		if err != nil {
+			pipeWriter.CloseWithError(err)
+			return
+		}
+
+		// copy data from ffmpeg to output pipe
+		// should block until song is finished or error
+		_, err = io.Copy(pipeWriter, stdout)
+		if err != nil {
+			log.Printf("Error Copying audio stream: %v", err)
+		}
+	}()
+
+	return pipeReader, nil
 }
 
 
