@@ -88,19 +88,19 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 
 func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	// Join the voice channel of the user who sent the command.
-	vc, err := p.Session.JoinVoiceChannel(i)
+	err := p.Session.JoinVoiceChannel(i)
 
 	if err != nil {
 		return
 	}
 
-	if !vc.Ready {
+	if !p.Session.VoiceConnection.Ready {
 		time.Sleep(1* time.Millisecond)
 	}
 
-	vc.Speaking(true)
+	p.Session.VoiceConnection.Speaking(true)
 
-	defer vc.Speaking(false)
+	defer p.Session.VoiceConnection.Speaking(false)
 	const (
 		channels int = 2
 		frameRate int = 48000
@@ -136,7 +136,7 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 			return
 		}
 		select {
-		case vc.OpusSend <- opus:
+		case p.Session.VoiceConnection.OpusSend <- opus:
 		case <- time.After(2* time.Second):
 			log.Println("Timeout sending opus packet, disconnecting.")
 			return

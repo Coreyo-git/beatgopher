@@ -11,17 +11,17 @@ import (
 type Session struct {
     Session *discordgo.Session
    	GuildID string
-	ChannelID string
-	VoiceChannelID string
+	TextChannelID string
+	VoiceConnection *discordgo.VoiceConnection
 }
  
  // NewSession creates a new Session wrapper.
-func NewSession(s *discordgo.Session, guildID string, channelID string) *Session {
+func NewSession(s *discordgo.Session, guildID string, textChannelID string) *Session {
 	return &Session{
 		Session: s,
 		GuildID: guildID,
-		ChannelID: channelID,
-		VoiceChannelID: "",
+		TextChannelID: textChannelID,
+		VoiceConnection: nil,
 	}
 }
  
@@ -44,7 +44,7 @@ func (s *Session) FollowupMessage(i *discordgo.Interaction, content string) erro
 }
 
 func (s *Session) SendChannelMessage(message string) error {
-	_, err := s.Session.ChannelMessageSend(s.ChannelID, message)
+	_, err := s.Session.ChannelMessageSend(s.TextChannelID, message)
 	if err != nil {
 		return fmt.Errorf("error sending channel message: %v", err)
 	}
@@ -65,7 +65,7 @@ func (s *Session) SendSongEmbed(song *services.YoutubeResult, footer string) err
 		},
 	}
 
-	_, err := s.Session.ChannelMessageSendEmbed(s.ChannelID, embed)
+	_, err := s.Session.ChannelMessageSendEmbed(s.TextChannelID, embed)
 	if err != nil {
 		return fmt.Errorf("error sending song embed: %v", err)
 	}
@@ -73,26 +73,33 @@ func (s *Session) SendSongEmbed(song *services.YoutubeResult, footer string) err
 }
  
 // JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
-func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) (*discordgo.VoiceConnection, error) {
+func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
 	g, err := s.Session.State.Guild(i.GuildID)
 	if err != nil {
-		return nil, fmt.Errorf("could not find guild: %w", err)
+		return fmt.Errorf("could not find guild: %w", err)
 	}
 
 	// Find the user's voice state.
 	vs := findUserVoiceState(g, i.Member.User.ID)
 	if vs == nil {
-		return nil, fmt.Errorf("you are not in a voice channel")
+		return fmt.Errorf("you are not in a voice channel")
 	}
 
 	// Join the user's voice channel.
 	vc, err := s.Session.ChannelVoiceJoin(s.GuildID, vs.ChannelID, false, true)
 	if err != nil {
 		s.FollowupMessage(i.Interaction, "Error joining voice channel")
-		return nil, fmt.Errorf("could not join voice channel: %w", err)
+		return fmt.Errorf("could not join voice channel: %w", err)
 	}
+	s.VoiceConnection = vc
+	return nil
+}
 
-	return vc, nil
+func (s *Session) LeaveVoiceChannel() {
+	if s.VoiceConnection != nil {
+		s.VoiceConnection.Disconnect()
+		s.VoiceConnection = nil
+	}
 }
 
 // Finds the user's voice state in the guild.
