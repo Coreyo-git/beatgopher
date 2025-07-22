@@ -18,8 +18,6 @@ type Player struct {
 	Queue *queue.Queue
 	Session *discord.Session
 	IsPlaying bool
-	GuildID string
-	ChannelID string
 	mu sync.Mutex
 }
 
@@ -29,24 +27,22 @@ var (
 )
 
  // NewSession creates a new Session wrapper.
- func NewPlayer(guildID string, ds *discord.Session, channelID string) *Player {
+ func NewPlayer(ds *discord.Session) *Player {
 	return &Player{
 		Queue: queue.NewQueue(),
 		Session: ds,
 		IsPlaying: false,
-		GuildID: guildID,
-		ChannelID: channelID,
 		mu: sync.Mutex{},
 	}
 }
 
-func GetOrCreatePlayer(guildID string, ds *discord.Session, channelID string) *Player {
+func GetOrCreatePlayer(ds *discord.Session) *Player {
 	playersMutex.Lock()
 	defer playersMutex.Unlock()
-	player, exists := players[guildID]
+	player, exists := players[ds.GuildID]
 	if !exists {
-		player = NewPlayer(guildID, ds, channelID)
-		players[guildID] = player
+		player = NewPlayer(ds)
+		players[ds.GuildID] = player
 	} 
 	
 	return player
@@ -66,7 +62,7 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 
 		go player.handlePlaybackLoop(i)
 	} else {
-		player.Session.SendSongEmbed(player.ChannelID, song, "Queued to play.")
+		player.Session.SendSongEmbed(song, "Queued to play.")
 	}
 } 
 
@@ -76,7 +72,7 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		if song == nil {
 			break
 		}
-		p.Session.SendSongEmbed(p.ChannelID, song, "Playing!")
+		p.Session.SendSongEmbed(song, "Playing!")
 
 		stdout, err := setupAudioOutput(song)
 		if err != nil {

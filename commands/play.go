@@ -12,8 +12,8 @@ import (
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ds := discord.NewSession(s)
-	p := player.GetOrCreatePlayer(i.GuildID, ds, i.ChannelID)
+	ds := discord.NewSession(s, i.GuildID, i.ChannelID)
+	p := player.GetOrCreatePlayer(ds)
 
 	var query string
 

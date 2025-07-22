@@ -9,12 +9,20 @@ import (
 
 // Session provides helper methods for interacting with the Discord API.
 type Session struct {
-   *discordgo.Session
+    Session *discordgo.Session
+   	GuildID string
+	ChannelID string
+	VoiceChannelID string
 }
  
  // NewSession creates a new Session wrapper.
-func NewSession(s *discordgo.Session) *Session {
-	return &Session{s}
+func NewSession(s *discordgo.Session, guildID string, channelID string) *Session {
+	return &Session{
+		Session: s,
+		GuildID: guildID,
+		ChannelID: channelID,
+		VoiceChannelID: "",
+	}
 }
  
 // InteractionRespond is a wrapper for s.InteractionRespond that simplifies sending a basic message.
@@ -35,15 +43,15 @@ func (s *Session) FollowupMessage(i *discordgo.Interaction, content string) erro
 	return err
 }
 
-func (s *Session) SendChannelMessage(channelID string, message string) error {
-	_, err := s.ChannelMessageSend(channelID, message)
+func (s *Session) SendChannelMessage(message string) error {
+	_, err := s.Session.ChannelMessageSend(s.ChannelID, message)
 	if err != nil {
 		return fmt.Errorf("error sending channel message: %v", err)
 	}
 	return nil
 }
 
-func (s *Session) SendSongEmbed(channelID string, song *services.YoutubeResult, footer string) error {
+func (s *Session) SendSongEmbed(song *services.YoutubeResult, footer string) error {
 	embed := &discordgo.MessageEmbed{
 		Title:       song.Title,
 		URL:         song.URL,
@@ -57,7 +65,7 @@ func (s *Session) SendSongEmbed(channelID string, song *services.YoutubeResult, 
 		},
 	}
 
-	_, err := s.ChannelMessageSendEmbed(channelID, embed)
+	_, err := s.Session.ChannelMessageSendEmbed(s.ChannelID, embed)
 	if err != nil {
 		return fmt.Errorf("error sending song embed: %v", err)
 	}
@@ -66,7 +74,7 @@ func (s *Session) SendSongEmbed(channelID string, song *services.YoutubeResult, 
  
 // JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
 func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) (*discordgo.VoiceConnection, error) {
-	g, err := s.State.Guild(i.GuildID)
+	g, err := s.Session.State.Guild(i.GuildID)
 	if err != nil {
 		return nil, fmt.Errorf("could not find guild: %w", err)
 	}
@@ -78,7 +86,7 @@ func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) (*discordgo.V
 	}
 
 	// Join the user's voice channel.
-	vc, err := s.ChannelVoiceJoin(i.GuildID, vs.ChannelID, false, true)
+	vc, err := s.Session.ChannelVoiceJoin(s.GuildID, vs.ChannelID, false, true)
 	if err != nil {
 		s.FollowupMessage(i.Interaction, "Error joining voice channel")
 		return nil, fmt.Errorf("could not join voice channel: %w", err)
