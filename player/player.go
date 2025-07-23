@@ -18,6 +18,7 @@ type Player struct {
 	Queue *queue.Queue
 	Session *discord.Session
 	IsPlaying bool
+	stop chan bool
 	mu sync.Mutex
 }
 
@@ -32,6 +33,7 @@ var (
 		Queue: queue.NewQueue(),
 		Session: ds,
 		IsPlaying: false,
+		stop: make(chan bool),
 		mu: sync.Mutex{},
 	}
 }
@@ -84,6 +86,14 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 	p.mu.Lock()
 	p.IsPlaying = false
 	p.mu.Unlock()
+}
+
+func (p *Player) Skip() bool {
+	if p.IsPlaying {
+		p.stop <- true
+		return true
+	}
+	return false
 }
 
 func (p *Player) Stop() {
@@ -149,6 +159,8 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 		}
 		select {
 		case p.Session.VoiceConnection.OpusSend <- opus:
+		case <- p.stop:
+			return
 		case <- time.After(2* time.Second):
 			log.Println("Timeout sending opus packet, disconnecting.")
 			return
