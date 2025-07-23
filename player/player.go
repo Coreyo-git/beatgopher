@@ -86,6 +86,18 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 	p.mu.Unlock()
 }
 
+func (p *Player) Stop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Clear the queue
+	p.Queue = queue.NewQueue()
+	p.IsPlaying = false
+
+	// Leave the voice channel
+	p.Session.LeaveVoiceChannel()
+}
+
 func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	// Join the voice channel of the user who sent the command.
 	err := p.Session.JoinVoiceChannel(i)
