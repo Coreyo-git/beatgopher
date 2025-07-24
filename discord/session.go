@@ -71,8 +71,38 @@ func (s *Session) SendSongEmbed(song *services.YoutubeResult, footer string) err
 	}
 	return nil
 }
+
+func (s *Session) SendQueueEmbed(songs []*services.YoutubeResult, currentPage int, totalPages int) error {
+	embed := &discordgo.MessageEmbed{
+		Title: "Queue",
+		Color: 0x1DB954, // Spotify green, or choose any hex color
+	}
+
+	var description string
+	if len(songs) == 0 {
+		description = "The queue is empty."
+	} else {
+		for i, song := range songs {
+			description += fmt.Sprintf("%d. [%s](%s) `[%s]`\n", i+1, song.Title, song.URL, song.Duration)
+		}
+	}
+
+	embed.Description = description
+	if totalPages > 1 {
+		embed.Footer = &discordgo.MessageEmbedFooter{
+			Text: fmt.Sprintf("Page %d of %d", currentPage, totalPages),
+		}
+	}
+
+	_, err := s.Session.ChannelMessageSendEmbed(s.TextChannelID, embed)
+	if err != nil {
+		return fmt.Errorf("error sending song embed: %v", err)
+	}
+	return nil
+}
  
 // JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
+
 func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
 	g, err := s.Session.State.Guild(i.GuildID)
 	if err != nil {

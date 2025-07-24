@@ -78,3 +78,13 @@ func (q *Queue) Size() int {
 	defer q.mu.Unlock()
 	return len(q.songs)
 }
+
+func (q *Queue) GetSongs() []*services.YoutubeResult {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Return a copy of the slice to avoid race conditions
+	songsCopy := make([]*services.YoutubeResult, len(q.songs))
+	copy(songsCopy, q.songs)
+	return songsCopy
+}
