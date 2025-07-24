@@ -2,6 +2,7 @@ package player
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -70,6 +71,19 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 		player.Session.SendSongEmbed(song, "Queued to play.")
 	}
 }
+
+func (player *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult) {
+	for j := 0; j < len(songs); j++ {
+		if j == 0 {
+			fmt.Printf("Playing song: %v\n", &songs[j])
+			player.AddSong(i, &songs[j])
+			continue
+		}
+		fmt.Printf("Adding song to queue: %v\n", &songs[j])
+		player.Queue.Enqueue(&songs[j])
+	}
+}
+
 
 // handlePlaybackLoop is the main loop for playing songs from the queue.
 func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {

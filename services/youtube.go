@@ -65,6 +65,51 @@ func SearchYoutube(query string) (YoutubeResult, error) {
 	return parseYoutubeOutput(output)
 }
 
+func GetYoutubePlaylistInfo(playlistURL string, total int64, randomizeSongs bool) ([]YoutubeResult, error) {
+	results := []YoutubeResult{}
+		// yt-dlp args with custom output
+		args := []string{
+			"--print", "%(id)s|%(channel)s|%(title)s|%(duration_string)s|%(webpage_url)s|%(thumbnail)s",
+			"--flat-playlist",
+			"--skip-download",
+			playlistURL,
+		}
+		if randomizeSongs {
+			args = append(args, "--playlist-random")
+		}
+		
+		cmd := exec.Command("yt-dlp", args...)
+		output, err := cmd.Output()
+	
+		if err != nil {
+			// Print stderr for debugging
+			if ee, ok := err.(*exec.ExitError); ok {
+				fmt.Println("yt-dlp playlist error output:", string(ee.Stderr))
+			}
+			fmt.Println("Command error:", err)
+			return results, err
+		}
+
+		lines := strings.Split(string(output), "\n")
+		var i int64 = 1
+		for _, line := range lines {
+			if i > total {
+				break
+			}
+			if line == "" {
+				continue
+			}
+			result, err := parseYoutubeOutput([]byte(line))
+			if err != nil {
+				log.Printf("Failed to parse line: %v", line)
+			}
+			results = append(results, result)
+			i++
+		}
+
+	return results, nil
+}
+
 func parseYoutubeOutput(output []byte) (YoutubeResult, error) {
 	result := YoutubeResult{}
 

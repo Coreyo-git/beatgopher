@@ -57,12 +57,14 @@ func (s *Session) SendSongEmbed(song *services.YoutubeResult, footer string) err
 		URL:         song.URL,
 		Description: fmt.Sprintf("Channel: **%s**\nDuration: `%s`", song.Channel, song.Duration),
 		Color:       0x1DB954, // Spotify green, or choose any hex color
-		Thumbnail: &discordgo.MessageEmbedThumbnail{
-			URL: song.Thumbnail,
-		},
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: footer,
 		},
+	}
+	if song.Thumbnail != "NA" {
+		embed.Thumbnail = &discordgo.MessageEmbedThumbnail{
+			URL: song.Thumbnail,
+		}
 	}
 
 	_, err := s.Session.ChannelMessageSendEmbed(s.TextChannelID, embed)
