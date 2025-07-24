@@ -14,30 +14,32 @@ import (
 	"layeh.com/gopus"
 )
 
+// Player represents a music player for a single guild.
 type Player struct {
-	Queue *queue.Queue
-	Session *discord.Session
+	Queue     *queue.Queue
+	Session   *discord.Session
 	IsPlaying bool
-	stop chan bool
-	mu sync.Mutex
+	stop      chan bool
+	mu        sync.Mutex
 }
 
 var (
-	playersMutex sync.Mutex 
-	players = make(map[string]*Player) 
+	playersMutex sync.Mutex
+	// Map of guild IDs to players.
+	players = make(map[string]*Player)
 )
 
- // NewSession creates a new Session wrapper.
- func NewPlayer(ds *discord.Session) *Player {
+func NewPlayer(ds *discord.Session) *Player {
 	return &Player{
-		Queue: queue.NewQueue(),
-		Session: ds,
+		Queue:     queue.NewQueue(),
+		Session:   ds,
 		IsPlaying: false,
-		stop: make(chan bool),
-		mu: sync.Mutex{},
+		stop:      make(chan bool),
+		mu:        sync.Mutex{},
 	}
 }
 
+// Gets or creates the player for a guild
 func GetOrCreatePlayer(ds *discord.Session) *Player {
 	playersMutex.Lock()
 	defer playersMutex.Unlock()
@@ -45,18 +47,19 @@ func GetOrCreatePlayer(ds *discord.Session) *Player {
 	if !exists {
 		player = NewPlayer(ds)
 		players[ds.GuildID] = player
-	} 
-	
+	}
+
 	return player
 }
 
+// Adds a song to the queue and starts playback if the player is not already playing.
 func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	player.Queue.Enqueue(song)
 
 	player.mu.Lock()
 	isAlreadyPlaying := player.IsPlaying
 	player.mu.Unlock()
-	
+
 	if !isAlreadyPlaying {
 		player.mu.Lock()
 		player.IsPlaying = true
@@ -66,8 +69,9 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 	} else {
 		player.Session.SendSongEmbed(song, "Queued to play.")
 	}
-} 
+}
 
+// handlePlaybackLoop is the main loop for playing songs from the queue.
 func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 	for {
 		song := p.Queue.Dequeue()
@@ -83,11 +87,11 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 
 		stream(i, stdout, p)
 	}
-	p.mu.Lock()
-	p.IsPlaying = false
-	p.mu.Unlock()
+
+	p.Stop()
 }
 
+// Skip current song.
 func (p *Player) Skip() bool {
 	if p.IsPlaying {
 		p.stop <- true
@@ -96,6 +100,7 @@ func (p *Player) Skip() bool {
 	return false
 }
 
+// Stops the player and clears the queue.
 func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -108,6 +113,7 @@ func (p *Player) Stop() {
 	p.Session.LeaveVoiceChannel()
 }
 
+// Streams the audio to the voice channel.
 func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	// Join the voice channel of the user who sent the command.
 	err := p.Session.JoinVoiceChannel(i)
@@ -117,17 +123,17 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	}
 
 	if !p.Session.VoiceConnection.Ready {
-		time.Sleep(1* time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	p.Session.VoiceConnection.Speaking(true)
 
 	defer p.Session.VoiceConnection.Speaking(false)
 	const (
-		channels int = 2
+		channels  int = 2
 		frameRate int = 48000
 		frameSize int = 960
-		maxBytes int = 1275
+		maxBytes  int = 1275
 	)
 
 	encoder, err := gopus.NewEncoder(frameRate, channels, gopus.Audio)
@@ -139,7 +145,7 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	// Reads raw PCM data from the stream
 	pcm := make([]int16, frameSize*channels)
 	for {
-		// read full frame 
+		// read full frame
 		err := binary.Read(stream, binary.LittleEndian, &pcm)
 		if err != nil {
 			// if stream end io.eof will be returned
@@ -159,16 +165,16 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 		}
 		select {
 		case p.Session.VoiceConnection.OpusSend <- opus:
-		case <- p.stop:
+		case <-p.stop:
 			return
-		case <- time.After(2* time.Second):
+		case <-time.After(2 * time.Second):
 			log.Println("Timeout sending opus packet, disconnecting.")
 			return
 		}
 	}
 }
 
-// Called when the user's query is a URL.
+// Sets up audio output from a YouTube result.
 func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 	// Consumer/Producer pipe to buffer to stream
 	pipeReader, pipeWriter := io.Pipe()
