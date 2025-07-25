@@ -26,6 +26,7 @@ COPY . .
 # Build
 # CGO self container binary
 # ldflags makes the binary file smaller
+ENV CGO_CFLAGS="-O2"
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /beatgopher ./main.go
 
 # ---- Final ----
@@ -33,7 +34,7 @@ FROM alpine:latest
 
 # Install runtime deps.
 # ca-certificates is needed for making HTTPS reqs.
-RUN apk add --no-cache ca-certificates ffmpeg curl python3
+RUN apk add --no-cache ca-certificates ffmpeg curl python3 opus
 
 # yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
@@ -42,7 +43,6 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 # Copy binary from build.
 COPY --from=builder /beatgopher /beatgopher
 
-# Copy the .env file.
 # Check out docker secrets?
 COPY ./.env ./.env
 
