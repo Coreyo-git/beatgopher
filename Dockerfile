@@ -5,8 +5,7 @@ FROM golang:1.24-alpine AS builder
 # ca-certificates is needed for making HTTPS reqs.
 # python3 is needed for yt-dlp.
 # git is needed for golang modules
-RUN apk add --no-cache ca-certificates ffmpeg curl python3 git
-RUN apk add --no-cache opus-dev build-base gcc
+RUN apk add --no-cache ca-certificates ffmpeg curl python3 git opus-dev gcc build-base
 
 # yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
