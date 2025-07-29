@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"strings"
@@ -133,42 +132,4 @@ func parseYoutubeOutput(output []byte) (YoutubeResult, error) {
 	}
 
 	return result, nil
-}
-
-// GetAudioStream returns a reader with the raw audio data from a YouTube URL.
-func GetAudioStream(url string) (io.ReadCloser, error) {
-	// Get the stream URL from ytdlp
-	ytdlp := exec.Command("yt-dlp", "-f", "bestaudio", "-g", url)
-	streamURLBytes, err := ytdlp.Output()
-
-	if err != nil {
-		log.Printf("Error getting audio stream from:", url)
-		return nil, err
-	}
-
-	streamURL := strings.TrimSpace(string(streamURLBytes))
-	
-	// Create the ffmpeg command
-	const (
-		audioFormat = "s16le"
-		sampleRate = "48000"
-		channelCount = "2"
-		outputPipe = "pipe:1"
-	)
-	ffmpeg := exec.Command("ffmpeg", "-i", streamURL, "-f", audioFormat, "-ar", sampleRate, "-ac", channelCount, outputPipe)
-
-	// Get the stdout pipe from the ffmpeg command
-	stdout, err := ffmpeg.StdoutPipe()
-	
-	if err != nil {
-		log.Printf("Error setting up ffmpeg")
-		return nil, err
-	}
-
-	if err := ffmpeg.Start(); err != nil {
-		log.Printf("Error starting ffmpeg")
-		return nil, err
-	}
-
-	return stdout, nil
 }

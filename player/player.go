@@ -19,6 +19,7 @@ import (
 type Player struct {
 	Queue     *queue.Queue
 	Session   *discord.Session
+	CurrentStream *services.AudioStream
 	IsPlaying bool
 	stop      chan bool
 	mu        sync.Mutex
@@ -34,6 +35,7 @@ func NewPlayer(ds *discord.Session) *Player {
 	return &Player{
 		Queue:     queue.NewQueue(),
 		Session:   ds,
+		CurrentStream: nil,
 		IsPlaying: false,
 		stop:      make(chan bool),
 		mu:        sync.Mutex{},
@@ -95,11 +97,12 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		p.Session.SendSongEmbed(song, "Playing!")
 
 		stdout, err := setupAudioOutput(song)
+		p.CurrentStream.Stdout = stdout
 		if err != nil {
 			log.Printf("Error in setupAudioOutput: %v", err)
 		}
 
-		stream(i, stdout, p)
+		stream(i, p)
 	}
 
 	p.Stop()
@@ -128,7 +131,7 @@ func (p *Player) Stop() {
 }
 
 // Streams the audio to the voice channel.
-func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
+func stream(i *discordgo.InteractionCreate, p *Player) {
 	// Join the voice channel of the user who sent the command.
 	err := p.Session.JoinVoiceChannel(i)
 
@@ -160,7 +163,7 @@ func stream(i *discordgo.InteractionCreate, stream io.ReadCloser, p *Player) {
 	pcm := make([]int16, frameSize*channels)
 	for {
 		// read full frame
-		err := binary.Read(stream, binary.LittleEndian, &pcm)
+		err := binary.Read(p.CurrentStream.Stdout, binary.LittleEndian, &pcm)
 		if err != nil {
 			// if stream end io.eof will be returned
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -197,7 +200,7 @@ func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 	go func() {
 		defer pipeWriter.Close()
 
-		stdout, err := services.GetAudioStream(result.URL)
+		CurrentStream, err := services.NewAudioStream(result.URL)
 		if err != nil {
 			pipeWriter.CloseWithError(err)
 			return
@@ -205,9 +208,17 @@ func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 
 		// copy data from ffmpeg to output pipe
 		// should block until song is finished or error
-		_, err = io.Copy(pipeWriter, stdout)
+		_, err = io.Copy(pipeWriter, CurrentStream.FfmpegStdout)
 		if err != nil {
 			log.Printf("Error Copying audio stream: %v", err)
+		}
+
+		if err := CurrentStream.Ytdlp.Wait(); err != nil {
+			log.Printf("Error waiting for ytdlp: %v", err)
+		}
+
+		if err := CurrentStream.Ffmpeg.Wait(); err != nil {
+			log.Printf("Error waiting for ffmpeg: %v", err)
 		}
 	}()
 
