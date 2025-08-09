@@ -60,8 +60,8 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func onReady(s *discordgo.Session, event *discordgo.Ready) {
-  log.Println("Registering commands...")
-  registerCommands(s)
+	log.Println("Registering commands...")
+	registerCommands(s)
 }
 
 // Iterates over command registry adding each command

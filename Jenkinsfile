@@ -6,7 +6,7 @@ pipeline {
         DOCKER_IMAGE = "beatgopher"
         CONTAINER_NAME = "beatgopher-prod"
         DOCKER_TAG = "${BUILD_NUMBER}"
-        DISCORD_TOKEN = credentials('discord-bot-token')
+        DISCORD_TOKEN = credentials('DISCORD_TOKEN')
     }
     
     // Only trigger on prod branch
