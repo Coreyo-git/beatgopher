@@ -16,9 +16,6 @@ pipeline {
     
     stages {
         stage('Checkout') {
-            when {
-                branch 'prod'
-            }
             steps {
                 echo 'Checking out code from prod branch...'
                 checkout scm
@@ -26,9 +23,6 @@ pipeline {
         }
         
         stage('Build Docker Image') {
-            when {
-                branch 'prod'
-            }
             steps {
                 echo 'Building Docker image...'
                 script {
@@ -42,9 +36,6 @@ pipeline {
         }
         
         stage('Stop Existing Container') {
-            when {
-                branch 'prod'
-            }
             steps {
                 echo 'Stopping existing container...'
                 script {
@@ -63,9 +54,6 @@ pipeline {
         }
         
         stage('Deploy') {
-            when {
-                branch 'prod'
-            }
             steps {
                 echo 'Deploying new container...'
                 script {
@@ -82,9 +70,6 @@ pipeline {
         }
         
         stage('Health Check') {
-            when {
-                branch 'prod'
-            }
             steps {
                 echo 'Performing health check...'
                 script {
