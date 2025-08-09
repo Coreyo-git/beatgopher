@@ -9,35 +9,35 @@ import (
 
 // Session provides helper methods for interacting with the Discord API.
 type Session struct {
-    Session *discordgo.Session
-   	GuildID string
-	TextChannelID string
+	Session         *discordgo.Session
+	GuildID         string
+	TextChannelID   string
 	VoiceConnection *discordgo.VoiceConnection
 }
- 
- // NewSession creates a new Session wrapper.
+
+// NewSession creates a new Session wrapper.
 func NewSession(s *discordgo.Session, guildID string, textChannelID string) *Session {
 	return &Session{
-		Session: s,
-		GuildID: guildID,
-		TextChannelID: textChannelID,
+		Session:         s,
+		GuildID:         guildID,
+		TextChannelID:   textChannelID,
 		VoiceConnection: nil,
 	}
 }
- 
+
 // InteractionRespond is a wrapper for s.InteractionRespond that simplifies sending a basic message.
 func (s *Session) InteractionRespond(i *discordgo.Interaction, content string) error {
 	return s.Session.InteractionRespond(i, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
-        Data: &discordgo.InteractionResponseData{
-        Content: content,
+		Data: &discordgo.InteractionResponseData{
+			Content: content,
 		},
 	})
 }
- 
+
 // FollowupMessage is a wrapper for s.FollowupMessageCreate that simplifies sending a followup message.
 func (s *Session) FollowupMessage(i *discordgo.Interaction, content string) error {
-	_, err := s.Session.FollowupMessageCreate(i,true, &discordgo.WebhookParams{
+	_, err := s.Session.FollowupMessageCreate(i, true, &discordgo.WebhookParams{
 		Content: content,
 	})
 	return err
@@ -102,7 +102,7 @@ func (s *Session) SendQueueEmbed(songs []*services.YoutubeResult, currentPage in
 	}
 	return nil
 }
- 
+
 // JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
 
 func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
@@ -132,6 +132,21 @@ func (s *Session) LeaveVoiceChannel() {
 		s.VoiceConnection.Disconnect()
 		s.VoiceConnection = nil
 	}
+}
+
+// GetGuildID returns the guild ID
+func (s *Session) GetGuildID() string {
+	return s.GuildID
+}
+
+// GetTextChannelID returns the text channel ID
+func (s *Session) GetTextChannelID() string {
+	return s.TextChannelID
+}
+
+// GetVoiceConnection returns the voice connection
+func (s *Session) GetVoiceConnection() *discordgo.VoiceConnection {
+	return s.VoiceConnection
 }
 
 // Finds the user's voice state in the guild.
