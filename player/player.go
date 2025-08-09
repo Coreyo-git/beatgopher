@@ -1,6 +1,7 @@
 package player
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -60,14 +61,10 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 	player.Queue.Enqueue(song)
 
 	player.mu.Lock()
-	isAlreadyPlaying := player.IsPlaying
-	player.mu.Unlock()
+	defer player.mu.Unlock()
 
-	if !isAlreadyPlaying {
-		player.mu.Lock()
+	if !player.IsPlaying {
 		player.IsPlaying = true
-		player.mu.Unlock()
-
 		go player.handlePlaybackLoop(i)
 	} else {
 		player.Session.SendSongEmbed(song, "Queued to play.")
@@ -96,9 +93,13 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		p.Session.SendSongEmbed(song, "Playing!")
 
 		stdout, err := setupAudioOutput(song)
-		p.CurrentStream.Stdout = stdout
 		if err != nil {
 			log.Printf("Error in setupAudioOutput: %v", err)
+		}
+
+		// Create a new AudioStream struct for this song
+		p.CurrentStream = &services.AudioStream{
+			Stdout: stdout,
 		}
 
 		stream(i, p)
@@ -150,18 +151,20 @@ func (p *Player) GetSession() discord.DiscordSessionInterface {
 func stream(i *discordgo.InteractionCreate, p *Player) {
 	// Join the voice channel of the user who sent the command.
 	err := p.Session.JoinVoiceChannel(i)
-
 	if err != nil {
+		log.Printf("Failed to join voice channel: %v", err)
 		return
 	}
 
-	if !p.Session.GetVoiceConnection().Ready {
-		time.Sleep(1 * time.Millisecond)
+	vc := p.Session.GetVoiceConnection()
+	if !vc.Ready {
+		log.Println("Voice connection not ready, waiting...")
+		time.Sleep(100 * time.Millisecond) // Increased wait time
 	}
 
-	p.Session.GetVoiceConnection().Speaking(true)
+	vc.Speaking(true)
+	defer vc.Speaking(false)
 
-	defer p.Session.GetVoiceConnection().Speaking(false)
 	const (
 		channels  int = 2
 		frameRate int = 48000
@@ -175,18 +178,38 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		return
 	}
 
+	// Debugging counters
+	var (
+		framesProcessed int64
+		timeouts        int64
+		errors          int64
+		startTime       = time.Now()
+	)
+
+	// Log stats every 5 seconds
+	statsTicker := time.NewTicker(5 * time.Second)
+	defer statsTicker.Stop()
+
+	go func() {
+		for range statsTicker.C {
+			elapsed := time.Since(startTime)
+			log.Printf("Audio Stats - Frames: %d, Timeouts: %d, Errors: %d, Duration: %v",
+				framesProcessed, timeouts, errors, elapsed)
+		}
+	}()
+
 	// Reads raw PCM data from the stream
 	pcm := make([]int16, frameSize*channels)
 	for {
 		// read full frame
 		err := binary.Read(p.CurrentStream.Stdout, binary.LittleEndian, &pcm)
 		if err != nil {
-			// if stream end io.eof will be returned
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Stream Finished.")
-				return // end
+				log.Printf("Stream finished after %d frames", framesProcessed)
+				return
 			}
-			log.Printf("Error reading from ffmpeg stream: %v", err)
+			log.Printf("Error reading from audio stream: %v", err)
+			errors++
 			return
 		}
 
@@ -194,15 +217,21 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		opus, err := encoder.Encode(pcm, frameSize, maxBytes)
 		if err != nil {
 			log.Printf("Error encoding audio to opus: %v", err)
+			errors++
 			return
 		}
+
 		select {
-		case p.Session.GetVoiceConnection().OpusSend <- opus:
+		case vc.OpusSend <- opus:
+			framesProcessed++
 		case <-p.stop:
+			log.Println("Playback stopped by user")
 			return
-		case <-time.After(2 * time.Second):
-			log.Println("Timeout sending opus packet, disconnecting.")
-			return
+		case <-time.After(5 * time.Second):
+			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
+			timeouts++
+			// Don't return, try to recover
+			continue
 		}
 	}
 }
@@ -212,30 +241,38 @@ func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 	// Consumer/Producer pipe to buffer to stream
 	pipeReader, pipeWriter := io.Pipe()
 
-	// go routine producing data from ffmpeg and filling the pipe
 	go func() {
 		defer pipeWriter.Close()
 
+		log.Printf("Starting audio stream for: %s", result.Title)
 		CurrentStream, err := services.NewAudioStream(result.URL)
 		if err != nil {
+			log.Printf("Error creating audio stream: %v", err)
 			pipeWriter.CloseWithError(err)
 			return
 		}
 
-		// copy data from ffmpeg to output pipe
-		// should block until song is finished or error
-		_, err = io.Copy(pipeWriter, CurrentStream.FfmpegStdout)
+		// Add buffering to smooth out the stream
+		bufferedReader := bufio.NewReaderSize(CurrentStream.FfmpegStdout, 64*1024) // 64KB buffer
+
+		// Copy with progress logging
+		written, err := io.Copy(pipeWriter, bufferedReader)
 		if err != nil {
-			log.Printf("Error Copying audio stream: %v", err)
+			log.Printf("Error copying audio stream after %d bytes: %v", written, err)
+		} else {
+			log.Printf("Audio stream completed, %d bytes processed", written)
 		}
 
+		// Wait for processes to complete
 		if err := CurrentStream.Ytdlp.Wait(); err != nil {
-			log.Printf("Error waiting for ytdlp: %v", err)
+			log.Printf("yt-dlp process error: %v", err)
 		}
 
 		if err := CurrentStream.Ffmpeg.Wait(); err != nil {
-			log.Printf("Error waiting for ffmpeg: %v", err)
+			log.Printf("ffmpeg process error: %v", err)
 		}
+
+		log.Println("Audio stream cleanup completed")
 	}()
 
 	return pipeReader, nil
