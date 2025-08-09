@@ -90,10 +90,21 @@ chmod a+rx /usr/local/bin/yt-dlp
 2.  **Configuration:**
     - Copy `example.env` to `.env` and add your bot token
 
-3.  **Run with Docker Compose:**
+3. **Run with Docker (Production): **
+    ```sh
+    docker build -t beatgopher .
+    
+    # run with env var
+    docker run -d --name beatgopher -e TOKEN="YOUR_DISCORD_BOT_TOKEN" beatgopher
+    
+    # env file
+    docker run -d --name beatgopher --env-file .env beatgopher
+    ```
+
+5.  **Run with Docker Compose (Development): ** 
     ```sh
     # For development
-    docker-compose up dev
+    docker-compose up
     
     # For production
     docker build -t beatgopher .

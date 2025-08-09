@@ -43,7 +43,7 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 # Copy binary from build.
 COPY --from=builder /beatgopher /beatgopher
 
-# Check out docker secrets?
-COPY ./.env ./.env
+# Environment variables will be provided at runtime via Jenkins
+# No need to copy .env file anymore
 
 CMD ["/beatgopher"]
