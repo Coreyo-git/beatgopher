@@ -17,12 +17,12 @@ import (
 
 // Player represents a music player for a single guild.
 type Player struct {
-	Queue     *queue.Queue
-	Session   *discord.Session
+	Queue         queue.QueueInterface
+	Session       discord.DiscordSessionInterface
 	CurrentStream *services.AudioStream
-	IsPlaying bool
-	stop      chan bool
-	mu        sync.Mutex
+	IsPlaying     bool
+	stop          chan bool
+	mu            sync.Mutex
 }
 
 var (
@@ -31,25 +31,25 @@ var (
 	players = make(map[string]*Player)
 )
 
-func NewPlayer(ds *discord.Session) *Player {
+func NewPlayer(ds discord.DiscordSessionInterface) *Player {
 	return &Player{
-		Queue:     queue.NewQueue(),
-		Session:   ds,
+		Queue:         queue.NewQueue(),
+		Session:       ds,
 		CurrentStream: nil,
-		IsPlaying: false,
-		stop:      make(chan bool),
-		mu:        sync.Mutex{},
+		IsPlaying:     false,
+		stop:          make(chan bool),
+		mu:            sync.Mutex{},
 	}
 }
 
 // Gets or creates the player for a guild
-func GetOrCreatePlayer(ds *discord.Session) *Player {
+func GetOrCreatePlayer(ds discord.DiscordSessionInterface) *Player {
 	playersMutex.Lock()
 	defer playersMutex.Unlock()
-	player, exists := players[ds.GuildID]
+	player, exists := players[ds.GetGuildID()]
 	if !exists {
 		player = NewPlayer(ds)
-		players[ds.GuildID] = player
+		players[ds.GetGuildID()] = player
 	}
 
 	return player
@@ -85,7 +85,6 @@ func (player *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.
 		player.Queue.Enqueue(&songs[j])
 	}
 }
-
 
 // handlePlaybackLoop is the main loop for playing songs from the queue.
 func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
@@ -130,6 +129,23 @@ func (p *Player) Stop() {
 	p.Session.LeaveVoiceChannel()
 }
 
+// IsPlayerPlaying returns true if the player is currently playing
+func (p *Player) IsPlayerPlaying() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.IsPlaying
+}
+
+// GetQueue returns the queue interface
+func (p *Player) GetQueue() queue.QueueInterface {
+	return p.Queue
+}
+
+// GetSession returns the discord session interface
+func (p *Player) GetSession() discord.DiscordSessionInterface {
+	return p.Session
+}
+
 // Streams the audio to the voice channel.
 func stream(i *discordgo.InteractionCreate, p *Player) {
 	// Join the voice channel of the user who sent the command.
@@ -139,13 +155,13 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		return
 	}
 
-	if !p.Session.VoiceConnection.Ready {
+	if !p.Session.GetVoiceConnection().Ready {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	p.Session.VoiceConnection.Speaking(true)
+	p.Session.GetVoiceConnection().Speaking(true)
 
-	defer p.Session.VoiceConnection.Speaking(false)
+	defer p.Session.GetVoiceConnection().Speaking(false)
 	const (
 		channels  int = 2
 		frameRate int = 48000
@@ -181,7 +197,7 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 			return
 		}
 		select {
-		case p.Session.VoiceConnection.OpusSend <- opus:
+		case p.Session.GetVoiceConnection().OpusSend <- opus:
 		case <-p.stop:
 			return
 		case <-time.After(2 * time.Second):
@@ -224,5 +240,3 @@ func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 
 	return pipeReader, nil
 }
-
-
