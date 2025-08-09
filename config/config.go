@@ -1,9 +1,9 @@
 package config
 
 import (
-	"log"
 	"os"
 	"github.com/joho/godotenv"
+	"fmt"
 )
 
 // Config holds all configuration for the application.
@@ -18,12 +18,13 @@ var Cfg *Config
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file.", err)
+		fmt.Printf("No .env file found.", err)
 	}
 
 	token := os.Getenv("TOKEN")
 	if token == "" {
-		log.Fatal("TOKEN environment variable not set.")
+		token = os.Getenv("DISCORD_TOKEN")
+		fmt.Printf("ENV Token not set as 'TOKEN', using 'DISCORD_TOKEN' instead.")
 	}
 
     // Cfg is initialized with the loaded configuration values.
