@@ -62,7 +62,7 @@ pipeline {
                         docker run -d \
                             --name ${CONTAINER_NAME} \
                             --restart unless-stopped \
-                            -e TOKEN="${DISCORD_TOKEN}" \
+                            -e DISCORD_TOKEN="${DISCORD_TOKEN}" \
                             ${DOCKER_IMAGE}:latest
                     '''
                 }
