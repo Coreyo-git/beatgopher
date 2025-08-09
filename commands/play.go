@@ -7,8 +7,8 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
-	"github.com/coreyo-git/beatgopher/services"
 	"github.com/coreyo-git/beatgopher/player"
+	"github.com/coreyo-git/beatgopher/services"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -28,7 +28,6 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	query = optionMap["query"].StringValue()
 
-
 	// Acknowledge command and reply to avoid timeout.
 	err := ds.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
 
@@ -42,7 +41,7 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	if err != nil {
 		return
-	} 
+	}
 
 	p.AddSong(i, &song)
 }
@@ -67,19 +66,19 @@ func init() {
 	}
 }
 
-
-
 // called when the user's query is a song name
 func handleSearch(ds *discord.Session, i *discordgo.InteractionCreate, query string) (services.YoutubeResult, error) {
-	if isValidURL(query){
-		result, err := services.GetYoutubeInfo(query)
-		if(err) != nil {
+	youtubeService := &services.YoutubeService{}
+
+	if isValidURL(query) {
+		result, err := youtubeService.GetYoutubeInfo(query)
+		if (err) != nil {
 			return services.YoutubeResult{}, err
 		}
 		return result, nil
 	}
 
-	result, err := services.SearchYoutube(query)
+	result, err := youtubeService.SearchYoutube(query)
 
 	if err != nil {
 		log.Printf("Error handling search: %v", err)
@@ -95,5 +94,3 @@ func isValidURL(s string) bool {
 	_, err := url.ParseRequestURI(s)
 	return err == nil
 }
-
-
