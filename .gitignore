@@ -28,6 +28,7 @@ vendor/
 *.bak
 *.swp
 tmp/
+--Frag*
 
 # IDE and editor specific files
 .idea/
