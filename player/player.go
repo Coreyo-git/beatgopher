@@ -47,10 +47,15 @@ func NewPlayer(ds discord.DiscordSessionInterface) *Player {
 func GetOrCreatePlayer(ds discord.DiscordSessionInterface) *Player {
 	playersMutex.Lock()
 	defer playersMutex.Unlock()
-	player, exists := players[ds.GetGuildID()]
+
+	guildID := ds.GetGuildID()
+	player, exists := players[guildID]
 	if !exists {
+		log.Printf("Creating new player for guild: %s", guildID)
 		player = NewPlayer(ds)
-		players[ds.GetGuildID()] = player
+		players[guildID] = player
+	} else {
+		log.Printf("Reusing existing player for guild: %s", guildID)
 	}
 
 	return player
@@ -63,9 +68,14 @@ func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.You
 	player.mu.Lock()
 	defer player.mu.Unlock()
 
+	// Check and set atomically to prevent race conditions
 	if !player.IsPlaying {
+		log.Printf("Starting playback for guild: %s, song: %s", player.Session.GetGuildID(), song.Title)
 		player.IsPlaying = true
-		go player.handlePlaybackLoop(i)
+		// Start playback in a separate goroutine
+		go func() {
+			player.handlePlaybackLoop(i)
+		}()
 	} else {
 		player.Session.SendSongEmbed(song, "Queued to play.")
 	}
