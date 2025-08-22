@@ -88,3 +88,9 @@ func (q *Queue) GetSongs() []*services.YoutubeResult {
 	copy(songsCopy, q.songs)
 	return songsCopy
 }
+
+func (q *Queue) Clear() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.songs = []*services.YoutubeResult{}
+}

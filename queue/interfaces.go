@@ -24,6 +24,9 @@ type QueueInterface interface {
 
 	// GetSongs returns a copy of all songs in the queue
 	GetSongs() []*services.YoutubeResult
+
+	// Clear removes all songs from the queue
+	Clear()
 }
 
 // Verify that Queue implements QueueInterface at compile time

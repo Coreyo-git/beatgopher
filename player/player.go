@@ -129,13 +129,14 @@ func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Clear the queue
-	p.Queue = queue.NewQueue()
-	p.IsPlaying = false
-
-	// Leave the voice channel
-	p.Session.LeaveVoiceChannel()
+	if p.IsPlaying {
+		p.IsPlaying = false
+		p.Queue.Clear()
+		p.stop <- true
+		p.Session.LeaveVoiceChannel()
+	}
 }
+
 
 // IsPlayerPlaying returns true if the player is currently playing
 func (p *Player) IsPlayerPlaying() bool {
