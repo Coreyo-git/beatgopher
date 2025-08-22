@@ -65,9 +65,6 @@ func GetOrCreatePlayer(ds discord.DiscordSessionInterface) *Player {
 func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	player.Queue.Enqueue(song)
 
-	player.mu.Lock()
-	defer player.mu.Unlock()
-
 	// Check and set atomically to prevent race conditions
 	if !player.IsPlaying {
 		log.Printf("Starting playback for guild: %s, song: %s", player.Session.GetGuildID(), song.Title)
@@ -155,6 +152,16 @@ func (p *Player) GetQueue() queue.QueueInterface {
 // GetSession returns the discord session interface
 func (p *Player) GetSession() discord.DiscordSessionInterface {
 	return p.Session
+}
+
+// Lock locks the player's mutex.
+func (p *Player) Lock() {
+	p.mu.Lock()
+}
+
+// Unlock unlocks the player's mutex.
+func (p *Player) Unlock() {
+	p.mu.Unlock()
 }
 
 // Streams the audio to the voice channel.
