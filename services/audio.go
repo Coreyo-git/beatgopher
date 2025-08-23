@@ -27,6 +27,15 @@ func NewAudioStream(url string) (*AudioStream, error) {
 	}, nil
 }
 
+func (as *AudioStream) Close() {
+	if as.Ytdlp != nil && as.Ytdlp.Process != nil {
+		as.Ytdlp.Process.Kill()
+	}
+	if as.Ffmpeg != nil && as.Ffmpeg.Process != nil {
+		as.Ffmpeg.Process.Kill()
+	}
+}
+
 // GetAudioStream returns a reader with the raw audio data from a YouTube URL.
 func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 	ytdlpArgs := []string{

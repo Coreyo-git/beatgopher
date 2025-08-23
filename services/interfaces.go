@@ -16,6 +16,8 @@ type YoutubeServiceInterface interface {
 type AudioStreamInterface interface {
 	// NewAudioStream creates a new audio stream from a URL
 	NewAudioStream(url string) (*AudioStream, error)
+	// Close closes the audio stream
+	Close()
 }
 
 // AudioStreamProvider is a concrete implementation of AudioStreamInterface
@@ -24,6 +26,12 @@ type AudioStreamProvider struct{}
 // NewAudioStream creates a new audio stream from a URL
 func (asp *AudioStreamProvider) NewAudioStream(url string) (*AudioStream, error) {
 	return NewAudioStream(url)
+}
+
+// Close closes the audio stream
+func (asp *AudioStreamProvider) Close() {
+	// This is a dummy implementation to satisfy the interface
+	// The actual implementation is in the AudioStream struct
 }
 
 // YoutubeService is a concrete implementation of YoutubeServiceInterface

@@ -132,6 +132,9 @@ func (p *Player) Stop() {
 	if p.IsPlaying {
 		p.IsPlaying = false
 		p.Queue.Clear()
+		if p.CurrentStream != nil {
+			p.CurrentStream.Close()
+		}
 		p.stop <- true
 		p.Session.LeaveVoiceChannel()
 	}
@@ -244,6 +247,9 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 			framesProcessed++
 		case <-p.stop:
 			log.Println("Playback stopped by user")
+			if p.CurrentStream != nil {
+				p.CurrentStream.Close()
+			}
 			return
 		case <-time.After(5 * time.Second):
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
