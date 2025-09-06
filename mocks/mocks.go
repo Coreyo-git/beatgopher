@@ -61,6 +61,10 @@ func (mq *MockQueue) GetSongs() []*services.YoutubeResult {
 	return songsCopy
 }
 
+func (mq *MockQueue) Clear() {
+	mq.songs = []*services.YoutubeResult{}
+}
+
 // Verify that MockQueue implements QueueInterface at compile time
 var _ queue.QueueInterface = (*MockQueue)(nil)
 

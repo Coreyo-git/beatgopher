@@ -15,6 +15,9 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	ds := discord.NewSession(s, i.GuildID, i.ChannelID)
 	p := player.GetOrCreatePlayer(ds)
 
+	p.Lock()
+	defer p.Unlock()
+
 	var query string
 
 	// Access options in the order provided by the user.
