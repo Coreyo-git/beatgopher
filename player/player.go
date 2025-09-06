@@ -102,14 +102,10 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		}
 		p.Session.SendSongEmbed(song, "Playing!")
 
-		stdout, err := setupAudioOutput(song)
+		_, err := setupAudioOutput(song, p)
 		if err != nil {
 			log.Printf("Error in setupAudioOutput: %v", err)
-		}
-
-		// Create a new AudioStream struct for this song
-		p.CurrentStream = &services.AudioStream{
-			Stdout: stdout,
+			continue // Skip this song and move to the next one
 		}
 
 		stream(i, p)
@@ -131,6 +127,12 @@ func (p *Player) Skip() bool {
 func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// Clean up current stream if it exists
+	if p.CurrentStream != nil {
+		p.CurrentStream.Cleanup()
+		p.CurrentStream = nil
+	}
 
 	// Clear the queue
 	p.Queue = queue.NewQueue()
@@ -174,6 +176,13 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 
 	vc.Speaking(true)
 	defer vc.Speaking(false)
+
+	// Ensure cleanup happens when stream function exits
+	defer func() {
+		if p.CurrentStream != nil {
+			p.CurrentStream.Cleanup()
+		}
+	}()
 
 	const (
 		channels  int = 2
@@ -236,6 +245,10 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 			framesProcessed++
 		case <-p.stop:
 			log.Println("Playback stopped by user")
+			// Clean up the current stream
+			if p.CurrentStream != nil {
+				p.CurrentStream.Cleanup()
+			}
 			return
 		case <-time.After(5 * time.Second):
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
@@ -247,7 +260,7 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 }
 
 // Sets up audio output from a YouTube result.
-func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
+func setupAudioOutput(result *services.YoutubeResult, p *Player) (io.ReadCloser, error) {
 	// Consumer/Producer pipe to buffer to stream
 	pipeReader, pipeWriter := io.Pipe()
 
@@ -261,6 +274,12 @@ func setupAudioOutput(result *services.YoutubeResult) (io.ReadCloser, error) {
 			pipeWriter.CloseWithError(err)
 			return
 		}
+
+		// Set the CurrentStream on the player for cleanup purposes
+		p.mu.Lock()
+		p.CurrentStream = CurrentStream
+		p.CurrentStream.Stdout = pipeReader
+		p.mu.Unlock()
 
 		// Add buffering to smooth out the stream
 		bufferedReader := bufio.NewReaderSize(CurrentStream.FfmpegStdout, 64*1024) // 64KB buffer

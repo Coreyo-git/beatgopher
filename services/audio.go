@@ -3,14 +3,15 @@ package services
 import (
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 )
 
 type AudioStream struct {
 	FfmpegStdout io.ReadCloser
-	Ytdlp *exec.Cmd
-	Ffmpeg *exec.Cmd
-	Stdout io.ReadCloser
+	Ytdlp        *exec.Cmd
+	Ffmpeg       *exec.Cmd
+	Stdout       io.ReadCloser
 }
 
 func NewAudioStream(url string) (*AudioStream, error) {
@@ -21,9 +22,9 @@ func NewAudioStream(url string) (*AudioStream, error) {
 
 	return &AudioStream{
 		FfmpegStdout: ffmpegStdout,
-		Ytdlp: ytdlp,
-		Ffmpeg: ffmpeg,
-		Stdout: nil,
+		Ytdlp:        ytdlp,
+		Ffmpeg:       ffmpeg,
+		Stdout:       nil,
 	}, nil
 }
 
@@ -68,4 +69,45 @@ func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 	}
 
 	return ffmpegStdout, ytdlp, ffmpeg, nil
+}
+
+// Cleanup forcefully terminates the FFmpeg and yt-dlp processes and closes streams
+func (as *AudioStream) Cleanup() {
+	if as == nil {
+		return
+	}
+
+	// Close the stdout reader first to signal downstream consumers
+	if as.FfmpegStdout != nil {
+		as.FfmpegStdout.Close()
+	}
+	if as.Stdout != nil {
+		as.Stdout.Close()
+	}
+
+	// Terminate FFmpeg process
+	if as.Ffmpeg != nil && as.Ffmpeg.Process != nil {
+		log.Printf("Terminating FFmpeg process (PID: %d)", as.Ffmpeg.Process.Pid)
+		if err := as.Ffmpeg.Process.Kill(); err != nil {
+			log.Printf("Error killing FFmpeg process: %v", err)
+		}
+		// Wait for process to actually terminate (with timeout)
+		go func() {
+			as.Ffmpeg.Wait()
+			log.Printf("FFmpeg process terminated")
+		}()
+	}
+
+	// Terminate yt-dlp process
+	if as.Ytdlp != nil && as.Ytdlp.Process != nil {
+		log.Printf("Terminating yt-dlp process (PID: %d)", as.Ytdlp.Process.Pid)
+		if err := as.Ytdlp.Process.Kill(); err != nil {
+			log.Printf("Error killing yt-dlp process: %v", err)
+		}
+		// Wait for process to actually terminate (with timeout)
+		go func() {
+			as.Ytdlp.Wait()
+			log.Printf("yt-dlp process terminated")
+		}()
+	}
 }
