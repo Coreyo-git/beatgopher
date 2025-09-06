@@ -61,6 +61,42 @@ func GetOrCreatePlayer(ds discord.DiscordSessionInterface) *Player {
 	return player
 }
 
+// HandleBotDisconnection cleans up player state when the bot gets disconnected from a guild
+func HandleBotDisconnection(guildID string) {
+	playersMutex.Lock()
+	defer playersMutex.Unlock()
+
+	if player, exists := players[guildID]; exists {
+		log.Printf("Cleaning up player state for disconnected guild: %s", guildID)
+
+		// Stop any ongoing playback and cleanup streams
+		player.mu.Lock()
+
+		// Clean up current stream if it exists
+		if player.CurrentStream != nil {
+			player.CurrentStream.Cleanup()
+			player.CurrentStream = nil
+		}
+
+		// Reset player state
+		player.Queue = queue.NewQueue()
+		player.IsPlaying = false
+
+		// Clear voice connection reference (it's already disconnected)
+		if player.Session.GetVoiceConnection() != nil {
+			// Don't call Disconnect() as it's already disconnected, just clear the reference
+			player.Session.(*discord.Session).VoiceConnection = nil
+		}
+
+		player.mu.Unlock()
+
+		// Remove the player from the map since it's no longer valid
+		delete(players, guildID)
+
+		log.Printf("Player cleanup completed for guild: %s", guildID)
+	}
+}
+
 // Adds a song to the queue and starts playback if the player is not already playing.
 func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	player.Queue.Enqueue(song)
@@ -109,6 +145,12 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		}
 
 		stream(i, p)
+
+		// After a song finishes, check if queue is empty and leave if so
+		if p.Queue.IsEmpty() {
+			log.Println("Queue is empty after song finished, leaving voice channel")
+			break
+		}
 	}
 
 	p.Stop()
@@ -169,9 +211,20 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 	}
 
 	vc := p.Session.GetVoiceConnection()
+	if vc == nil || !p.Session.IsVoiceConnected() {
+		log.Println("Voice connection is invalid or disconnected, aborting stream")
+		return
+	}
+
 	if !vc.Ready {
 		log.Println("Voice connection not ready, waiting...")
 		time.Sleep(100 * time.Millisecond) // Increased wait time
+
+		// Check again after waiting
+		if !p.Session.IsVoiceConnected() {
+			log.Println("Voice connection lost while waiting, aborting stream")
+			return
+		}
 	}
 
 	vc.Speaking(true)
@@ -243,6 +296,11 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		select {
 		case vc.OpusSend <- opus:
 			framesProcessed++
+			// Periodically check if we're still connected (every 100 frames)
+			if framesProcessed%100 == 0 && !p.Session.IsVoiceConnected() {
+				log.Println("Voice connection lost during streaming, stopping playback")
+				return
+			}
 		case <-p.stop:
 			log.Println("Playback stopped by user")
 			// Clean up the current stream
@@ -253,6 +311,11 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		case <-time.After(5 * time.Second):
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
 			timeouts++
+			// Check if connection is still valid on timeout
+			if !p.Session.IsVoiceConnected() {
+				log.Println("Voice connection lost during timeout, stopping playback")
+				return
+			}
 			// Don't return, try to recover
 			continue
 		}

@@ -134,6 +134,16 @@ func (s *Session) LeaveVoiceChannel() {
 	}
 }
 
+// IsVoiceConnected checks if the bot is still connected to a voice channel
+func (s *Session) IsVoiceConnected() bool {
+	if s.VoiceConnection == nil {
+		return false
+	}
+
+	// Check if the connection is ready
+	return s.VoiceConnection.Ready
+}
+
 // GetGuildID returns the guild ID
 func (s *Session) GetGuildID() string {
 	return s.GuildID

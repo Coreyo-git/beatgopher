@@ -36,6 +36,9 @@ type DiscordSessionInterface interface {
 
 	// GetVoiceConnection returns the voice connection
 	GetVoiceConnection() *discordgo.VoiceConnection
+
+	// IsVoiceConnected checks if the bot is still connected to a voice channel
+	IsVoiceConnected() bool
 }
 
 // Verify that Session implements DiscordSessionInterface at compile time

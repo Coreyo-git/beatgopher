@@ -9,6 +9,7 @@ import (
 
 	"github.com/coreyo-git/beatgopher/commands"
 	"github.com/coreyo-git/beatgopher/config"
+	"github.com/coreyo-git/beatgopher/player"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -22,6 +23,9 @@ func main() {
 
 	// Add a handler for interactions e.g.. /play
 	session.AddHandler(interactionCreate)
+
+	// Add a handler for voice state changes to detect disconnections
+	session.AddHandler(voiceStateUpdate)
 
 	// messages and voice states.
 	// https://discord.com/developers/docs/topics/gateway#gateway-intents
@@ -62,6 +66,20 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 func onReady(s *discordgo.Session, event *discordgo.Ready) {
 	log.Println("Registering commands...")
 	registerCommands(s)
+}
+
+// voiceStateUpdate handles voice state changes to detect when the bot gets disconnected
+func voiceStateUpdate(s *discordgo.Session, vsu *discordgo.VoiceStateUpdate) {
+	// Check if this is our bot's voice state
+	if vsu.UserID != s.State.User.ID {
+		return
+	}
+
+	// If the bot left a voice channel (ChannelID is empty), clean up the player
+	if vsu.ChannelID == "" {
+		log.Printf("Bot was disconnected from voice channel in guild: %s", vsu.GuildID)
+		player.HandleBotDisconnection(vsu.GuildID)
+	}
 }
 
 // Iterates over command registry adding each command
