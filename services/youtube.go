@@ -11,8 +11,8 @@ type YoutubeResult struct {
 	ID string `json:"id"`
 	Channel string `json:"channel"`
 	Title string `json:"title"`
-	Duration string `json:"duration"`
-	URL string `json:"url"`
+	Duration string `json:"duration_string"`
+	URL string `json:"webpage_url"`
 	Thumbnail string `json:"thumbnail"`
 }
 
@@ -21,8 +21,13 @@ func GetYoutubeInfo(url string) (YoutubeResult, error) {
 
 	args := []string{
 		url,
-		"--print", "%(id)s|%(channel)s|%(title)s|%(duration_string)s|%(webpage_url)s|%(thumbnail)s",
 		"--skip-download",
+		"--no-playlist", 
+		"--flat-playlist",
+		"--no-warnings",
+		"--no-check-certificate",
+		"--geo-bypass" ,
+		"--print", "%(id)s|%(channel)s|%(title)s|%(duration_string)s|%(webpage_url)s|%(thumbnail)s",
 	}
 	cmd := exec.Command("yt-dlp", args...)
 
@@ -46,8 +51,13 @@ func SearchYoutube(query string) (YoutubeResult, error) {
 	// yt-dlp args with custom output
 	args := []string{
 		"ytsearch:" + query,
-		"--print", "%(id)s|%(channel)s|%(title)s|%(duration_string)s|%(webpage_url)s|%(thumbnail)s",
 		"--skip-download",
+		"--no-playlist", 
+		"--flat-playlist",
+		"--no-warnings",
+		"--no-check-certificate",
+		"--geo-bypass" ,
+		"--print", "%(id)s|%(channel)s|%(title)s|%(duration_string)s|%(webpage_url)s|%(thumbnail)s",
 	}
 	cmd := exec.Command("yt-dlp", args...)
 	output, err := cmd.Output()
