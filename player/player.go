@@ -10,117 +10,70 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/coreyo-git/beatgopher/discord"
 	"github.com/coreyo-git/beatgopher/queue"
 	"github.com/coreyo-git/beatgopher/services"
 	"layeh.com/gopus"
 )
 
+type PlayerInterface interface {
+	// AddSong adds a song to the queue and starts playback if not already playing
+	AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult)
+
+	// AddSongs adds multiple songs to the queue
+	AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult)
+
+	// Skip skips the current song
+	Skip() bool
+
+	// Stop stops the player and clears the queue
+	Stop()
+
+	// IsPlayerPlaying returns true if the player is currently playing
+	IsPlayerPlaying() bool
+}
+
 // Player represents a music player for a single guild.
 type Player struct {
-	Queue         queue.QueueInterface
-	Session       discord.DiscordSessionInterface
 	CurrentStream *services.AudioStream
+	Queue         queue.QueueInterface
 	IsPlaying     bool
 	stop          chan bool
+	skip          chan bool
 	mu            sync.Mutex
+
+	OnSendEmbedMessage 	   func(song *services.YoutubeResult, content string) error
+	OnCheckVoiceConnection func() bool
+	OnGetVoiceConnection func() *discordgo.VoiceConnection
 }
 
-var (
-	playersMutex sync.Mutex
-	// Map of guild IDs to players.
-	players = make(map[string]*Player)
-)
-
-func NewPlayer(ds discord.DiscordSessionInterface) *Player {
+func NewPlayer(
+		queue queue.QueueInterface, 
+		onSendEmbedMessage func(song *services.YoutubeResult, content string) error,
+		onCheckVoiceConnection func() bool,
+		onGetVoiceConnection func() *discordgo.VoiceConnection,
+		
+	) *Player {
 	return &Player{
-		Queue:         queue.NewQueue(),
-		Session:       ds,
 		CurrentStream: nil,
+		Queue:         queue,
 		IsPlaying:     false,
 		stop:          make(chan bool),
+		skip:          make(chan bool),
 		mu:            sync.Mutex{},
-	}
-}
 
-// Gets or creates the player for a guild
-func GetOrCreatePlayer(ds discord.DiscordSessionInterface) *Player {
-	playersMutex.Lock()
-	defer playersMutex.Unlock()
-
-	guildID := ds.GetGuildID()
-	player, exists := players[guildID]
-	if !exists {
-		log.Printf("Creating new player for guild: %s", guildID)
-		player = NewPlayer(ds)
-		players[guildID] = player
-	} else {
-		log.Printf("Reusing existing player for guild: %s", guildID)
-	}
-
-	return player
-}
-
-// HandleBotDisconnection cleans up player state when the bot gets disconnected from a guild
-func HandleBotDisconnection(guildID string) {
-	playersMutex.Lock()
-	defer playersMutex.Unlock()
-
-	if player, exists := players[guildID]; exists {
-		log.Printf("Cleaning up player state for disconnected guild: %s", guildID)
-
-		// Stop any ongoing playback and cleanup streams
-		player.mu.Lock()
-
-		// Clean up current stream if it exists
-		if player.CurrentStream != nil {
-			player.CurrentStream.Cleanup()
-			player.CurrentStream = nil
-		}
-
-		// Reset player state
-		player.Queue = queue.NewQueue()
-		player.IsPlaying = false
-
-		// Clear voice connection reference (it's already disconnected)
-		if player.Session.GetVoiceConnection() != nil {
-			// Don't call Disconnect() as it's already disconnected, just clear the reference
-			player.Session.(*discord.Session).VoiceConnection = nil
-		}
-
-		player.mu.Unlock()
-
-		// Remove the player from the map since it's no longer valid
-		delete(players, guildID)
-
-		log.Printf("Player cleanup completed for guild: %s", guildID)
+		OnSendEmbedMessage: onSendEmbedMessage,
+		OnCheckVoiceConnection: onCheckVoiceConnection,
+		OnGetVoiceConnection: onGetVoiceConnection, 
 	}
 }
 
 // Adds a song to the queue and starts playback if the player is not already playing.
 func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	player.Queue.Enqueue(song)
-
-	// Check and set atomically to prevent race conditions
-	if !player.IsPlaying {
-		log.Printf("Starting playback for guild: %s, song: %s", player.Session.GetGuildID(), song.Title)
-		player.IsPlaying = true
-		// Start playback in a separate goroutine
-		go func() {
-			player.handlePlaybackLoop(i)
-		}()
-	} else {
-		player.Session.SendSongEmbed(song, "Queued to play.")
-	}
 }
 
 func (player *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult) {
 	for j := 0; j < len(songs); j++ {
-		if j == 0 {
-			fmt.Printf("Playing song: %v\n", &songs[j])
-			player.AddSong(i, &songs[j])
-			continue
-		}
 		fmt.Printf("Adding song to queue: %v\n", &songs[j])
 		player.Queue.Enqueue(&songs[j])
 	}
@@ -133,7 +86,7 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 		if song == nil {
 			break
 		}
-		p.Session.SendSongEmbed(song, "Playing!")
+		p.OnSendEmbedMessage(song, "Playing!")
 
 		_, err := setupAudioOutput(song, p)
 		if err != nil {
@@ -156,7 +109,7 @@ func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
 // Skip current song.
 func (p *Player) Skip() bool {
 	if p.IsPlaying {
-		p.stop <- true
+		p.skip <- true
 		return true
 	}
 	return false
@@ -176,9 +129,6 @@ func (p *Player) Stop() {
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
-
-	// Leave the voice channel
-	p.Session.LeaveVoiceChannel()
 }
 
 // IsPlayerPlaying returns true if the player is currently playing
@@ -193,11 +143,6 @@ func (p *Player) GetQueue() queue.QueueInterface {
 	return p.Queue
 }
 
-// GetSession returns the discord session interface
-func (p *Player) GetSession() discord.DiscordSessionInterface {
-	return p.Session
-}
-
 // Lock locks the player's mutex.
 func (p *Player) Lock() {
 	p.mu.Lock()
@@ -210,15 +155,8 @@ func (p *Player) Unlock() {
 
 // Streams the audio to the voice channel.
 func stream(i *discordgo.InteractionCreate, p *Player) {
-	// Join the voice channel of the user who sent the command.
-	err := p.Session.JoinVoiceChannel(i)
-	if err != nil {
-		log.Printf("Failed to join voice channel: %v", err)
-		return
-	}
-
-	vc := p.Session.GetVoiceConnection()
-	if vc == nil || !p.Session.IsVoiceConnected() {
+	vc := p.OnGetVoiceConnection()
+	if vc == nil || !p.OnCheckVoiceConnection() {
 		log.Println("Voice connection is invalid or disconnected, aborting stream")
 		return
 	}
@@ -228,7 +166,7 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		time.Sleep(100 * time.Millisecond) // Increased wait time
 
 		// Check again after waiting
-		if !p.Session.IsVoiceConnected() {
+		if !p.OnCheckVoiceConnection() {
 			log.Println("Voice connection lost while waiting, aborting stream")
 			return
 		}
@@ -304,7 +242,7 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 		case vc.OpusSend <- opus:
 			framesProcessed++
 			// Periodically check if we're still connected (every 100 frames)
-			if framesProcessed%100 == 0 && !p.Session.IsVoiceConnected() {
+			if framesProcessed%100 == 0 && !p.OnCheckVoiceConnection() {
 				log.Println("Voice connection lost during streaming, stopping playback")
 				return
 			}
@@ -319,7 +257,7 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
 			timeouts++
 			// Check if connection is still valid on timeout
-			if !p.Session.IsVoiceConnected() {
+			if !p.OnCheckVoiceConnection() {
 				log.Println("Voice connection lost during timeout, stopping playback")
 				return
 			}

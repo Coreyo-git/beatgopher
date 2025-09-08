@@ -12,3 +12,10 @@ type Command struct {
 	// Function that runs when the command is used.
 	Handler func(s *discordgo.Session, i *discordgo.InteractionCreate)
 }
+
+type CommandRequest struct {
+    CommandType string // "play" or "playlist"
+    Interaction *discordgo.InteractionCreate
+    Session     *discordgo.Session
+    Handler     func(*discordgo.Session, *discordgo.InteractionCreate)
+}

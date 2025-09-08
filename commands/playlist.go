@@ -8,13 +8,11 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
-	"github.com/coreyo-git/beatgopher/player"
 	"github.com/coreyo-git/beatgopher/services"
 )
 
 func playlistHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ds := discord.NewSession(s, i.GuildID, i.ChannelID)
-	p := player.GetOrCreatePlayer(ds)
+	session := discord.GetOrCreateSession(s, i)
 
 	var query string
 	var total int64 = 25
@@ -40,21 +38,21 @@ func playlistHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	query = optionMap["url"].StringValue()
 	
 	// Acknowledge command and reply to avoid timeout.
-	err := ds.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
+	err := session.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
 
 	if err != nil {
-		ds.InteractionRespond(i.Interaction, "Something went wrong while trying to respond.")
+		session.InteractionRespond(i.Interaction, "Something went wrong while trying to respond.")
 		log.Printf("Error responding to interaction: %v", err)
 	}
 
 	// Handles the search and gets the piped out audio stream
-	songs, err := handlePlaylist(ds, i, query, total, random)
+	songs, err := handlePlaylist(session, i, query, total, random)
 
 	if err != nil {
 		return
 	} 
 	fmt.Println("Adding songs from playlist")
-	p.AddSongs(i, songs)
+	session.Player.AddSongs(i, songs)
 }
 
 func init() {

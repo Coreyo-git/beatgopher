@@ -9,7 +9,7 @@ import (
 
 	"github.com/coreyo-git/beatgopher/commands"
 	"github.com/coreyo-git/beatgopher/config"
-	"github.com/coreyo-git/beatgopher/player"
+	"github.com/coreyo-git/beatgopher/discord"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -78,7 +78,7 @@ func voiceStateUpdate(s *discordgo.Session, vsu *discordgo.VoiceStateUpdate) {
 	// If the bot left a voice channel (ChannelID is empty), clean up the player
 	if vsu.ChannelID == "" {
 		log.Printf("Bot was disconnected from voice channel in guild: %s", vsu.GuildID)
-		player.HandleBotDisconnection(vsu.GuildID)
+		discord.HandleBotDisconnection(vsu.GuildID)
 	}
 }
 

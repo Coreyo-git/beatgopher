@@ -6,18 +6,16 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
-	"github.com/coreyo-git/beatgopher/player"
 	"github.com/coreyo-git/beatgopher/services"
 )
 
 func removeHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ds := discord.NewSession(s, i.GuildID, i.ChannelID)
-	p := player.GetOrCreatePlayer(ds)
+	session := discord.GetOrCreateSession(s, i)
 
 	// Get the songs from the queue to check if it's empty
-	songs := p.Queue.GetSongs()
+	songs := session.Queue.GetSongs()
 	if len(songs) == 0 {
-		ds.InteractionRespond(i.Interaction, "The queue is empty. Nothing to remove.")
+		session.InteractionRespond(i.Interaction, "The queue is empty. Nothing to remove.")
 		return
 	}
 
@@ -34,30 +32,30 @@ func removeHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	// Check if user provided a position number
 	if positionOpt, exists := optionMap["position"]; exists {
 		position := int(positionOpt.IntValue())
-		removedSong, err = removeByPosition(p, position, songs)
+		removedSong, err = removeByPosition(session, position, songs)
 	} else if queryOpt, exists := optionMap["query"]; exists {
 		// Remove by search query (title or partial title match)
 		query := queryOpt.StringValue()
-		removedSong, err = removeByQuery(p, query, songs)
+		removedSong, err = removeByQuery(session, query, songs)
 	} else {
-		ds.InteractionRespond(i.Interaction, "Please provide either a position number or a search query to remove a song.")
+		session.InteractionRespond(i.Interaction, "Please provide either a position number or a search query to remove a song.")
 		return
 	}
 
 	if err != nil {
-		ds.InteractionRespond(i.Interaction, err.Error())
+		session.InteractionRespond(i.Interaction, err.Error())
 		return
 	}
 
 	if removedSong != nil {
-		ds.InteractionRespond(i.Interaction, fmt.Sprintf("✅ Removed **%s** from the queue.", *removedSong))
+		session.InteractionRespond(i.Interaction, fmt.Sprintf("✅ Removed **%s** from the queue.", *removedSong))
 	} else {
-		ds.InteractionRespond(i.Interaction, "❌ Could not find the specified song to remove.")
+		session.InteractionRespond(i.Interaction, "❌ Could not find the specified song to remove.")
 	}
 }
 
 // removeByPosition removes a song at the specified position (1-indexed)
-func removeByPosition(p *player.Player, position int, songs []*services.YoutubeResult) (*string, error) {
+func removeByPosition(s discord.DiscordSessionInterface, position int, songs []*services.YoutubeResult) (*string, error) {
 	if position < 1 || position > len(songs) {
 		return nil, fmt.Errorf("❌ Invalid position. Please specify a position between 1 and %d", len(songs))
 	}
@@ -65,7 +63,7 @@ func removeByPosition(p *player.Player, position int, songs []*services.YoutubeR
 	// Convert to 0-indexed
 	songToRemove := songs[position-1]
 
-	if p.Queue.RemoveFromQueue(songToRemove) {
+	if s.RemoveFromQueue(songToRemove) {
 		return &songToRemove.Title, nil
 	}
 
@@ -73,12 +71,12 @@ func removeByPosition(p *player.Player, position int, songs []*services.YoutubeR
 }
 
 // removeByQuery removes the first song that matches the query (case-insensitive partial match)
-func removeByQuery(p *player.Player, query string, songs []*services.YoutubeResult) (*string, error) {
+func removeByQuery(s discord.DiscordSessionInterface, query string, songs []*services.YoutubeResult) (*string, error) {
 	query = strings.ToLower(query)
 
 	for _, song := range songs {
 		if strings.Contains(strings.ToLower(song.Title), query) {
-			if p.Queue.RemoveFromQueue(song) {
+			if s.RemoveFromQueue(song) {
 				return &song.Title, nil
 			}
 		}

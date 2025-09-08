@@ -2,10 +2,53 @@ package discord
 
 import (
 	"fmt"
+	"log"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/coreyo-git/beatgopher/player"
+	"github.com/coreyo-git/beatgopher/queue"
 	"github.com/coreyo-git/beatgopher/services"
 )
+
+// DiscordSessionInterface defines the contract for Discord session operations
+type DiscordSessionInterface interface {
+	// InteractionRespond sends a response to an interaction
+	InteractionRespond(i *discordgo.Interaction, content string) error
+
+	// FollowupMessage sends a followup message to an interaction
+	FollowupMessage(i *discordgo.Interaction, content string) error
+
+	// SendChannelMessage sends a message to the text channel
+	SendChannelMessage(message string) error
+
+	// SendSongEmbed sends an embed message for a song
+	SendSongEmbed(song *services.YoutubeResult, footer string) error
+
+	// SendQueueEmbed sends an embed message for the queue
+	SendQueueEmbed(songs []*services.YoutubeResult, currentPage int, totalPages int) error
+
+	// JoinVoiceChannel joins the voice channel of the user who triggered the interaction
+	JoinVoiceChannel(i *discordgo.InteractionCreate) error
+
+	// LeaveVoiceChannel leaves the current voice channel
+	LeaveVoiceChannel()
+
+	// GetGuildID returns the guild ID
+	GetGuildID() string
+
+	// GetTextChannelID returns the text channel ID
+	GetTextChannelID() string
+
+	// GetVoiceConnection returns the voice connection
+	GetVoiceConnection() *discordgo.VoiceConnection
+
+	// IsVoiceConnected checks if the bot is still connected to a voice channel
+	IsVoiceConnected() bool
+
+	// function to remove from the queue 
+	RemoveFromQueue(song *services.YoutubeResult) bool
+}
 
 // Session provides helper methods for interacting with the Discord API.
 type Session struct {
@@ -13,16 +56,104 @@ type Session struct {
 	GuildID         string
 	TextChannelID   string
 	VoiceConnection *discordgo.VoiceConnection
+	Player          player.PlayerInterface
+	Queue           queue.QueueInterface
+	mu              sync.RWMutex
 }
 
+var (
+	sessionsMutex sync.Mutex
+	// Map of guild IDs to players.
+	sessions = make(map[string]*Session)
+)
+
 // NewSession creates a new Session wrapper.
-func NewSession(s *discordgo.Session, guildID string, textChannelID string) *Session {
-	return &Session{
+func newSession(s *discordgo.Session, i *discordgo.InteractionCreate) *Session {
+	queue := queue.NewQueue()
+	session := &Session{
 		Session:         s,
-		GuildID:         guildID,
-		TextChannelID:   textChannelID,
+		GuildID:         i.GuildID,
+		TextChannelID:   i.ChannelID,
 		VoiceConnection: nil,
+		Queue:           queue,
+		Player:			 nil,
+		mu:              sync.RWMutex{},
 	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	session.Player = player.NewPlayer(
+		queue,
+		session.SendSongEmbed,
+		session.IsVoiceConnected,
+		session.GetVoiceConnection,
+	)
+
+	return session
+}
+
+func GetOrCreateSession(s *discordgo.Session, i *discordgo.InteractionCreate) *Session {
+	sessionsMutex.Lock()
+	defer sessionsMutex.Unlock()
+
+	session, exists := sessions[i.GuildID]
+	if !exists {
+		session = newSession(s, i)
+		sessions[i.GuildID] = session
+	}
+
+	err := session.JoinVoiceChannel(i)
+	if err != nil {
+		log.Printf("Error joining voice channel for guild: %v", i.GuildID)
+	}
+
+	return session
+}
+
+// HandleBotDisconnection cleans up session state when the bot gets disconnected from a guild
+func HandleBotDisconnection(guildID string) {
+	sessionsMutex.Lock()
+	defer sessionsMutex.Unlock()
+
+	if session, exists := sessions[guildID]; exists {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		log.Printf("Cleaning up player state for disconnected guild: %s", guildID)
+
+		// Reset player state
+		session.Queue.Clear()
+		session.Player.Stop()
+
+		// Clear voice connection reference
+		if session.GetVoiceConnection() != nil {
+			session.VoiceConnection = nil
+		}
+
+		// Remove the player from the map since it's no longer valid
+		delete(sessions, guildID)
+
+		log.Printf("Session cleanup completed for guild: %s", guildID)
+	}
+}
+
+func (s *Session) RemoveFromQueue(song *services.YoutubeResult) bool {
+	return s.Queue.RemoveFromQueue(song)
+}
+
+// GetGuildID returns the guild ID
+func (s *Session) GetGuildID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.GuildID
+}
+
+// GetTextChannelID returns the text channel ID
+func (s *Session) GetTextChannelID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.TextChannelID
 }
 
 // InteractionRespond is a wrapper for s.InteractionRespond that simplifies sending a basic message.
@@ -99,72 +230,6 @@ func (s *Session) SendQueueEmbed(songs []*services.YoutubeResult, currentPage in
 	_, err := s.Session.ChannelMessageSendEmbed(s.TextChannelID, embed)
 	if err != nil {
 		return fmt.Errorf("error sending song embed: %v", err)
-	}
-	return nil
-}
-
-// JoinVoiceChannel finds the voice channel of the user who triggered the interaction and joins it.
-
-func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
-	g, err := s.Session.State.Guild(i.GuildID)
-	if err != nil {
-		return fmt.Errorf("could not find guild: %w", err)
-	}
-
-	// Find the user's voice state.
-	vs := findUserVoiceState(g, i.Member.User.ID)
-	if vs == nil {
-		return fmt.Errorf("you are not in a voice channel")
-	}
-
-	// Join the user's voice channel.
-	vc, err := s.Session.ChannelVoiceJoin(s.GuildID, vs.ChannelID, false, true)
-	if err != nil {
-		s.FollowupMessage(i.Interaction, "Error joining voice channel")
-		return fmt.Errorf("could not join voice channel: %w", err)
-	}
-	s.VoiceConnection = vc
-	return nil
-}
-
-func (s *Session) LeaveVoiceChannel() {
-	if s.VoiceConnection != nil {
-		s.VoiceConnection.Disconnect()
-		s.VoiceConnection = nil
-	}
-}
-
-// IsVoiceConnected checks if the bot is still connected to a voice channel
-func (s *Session) IsVoiceConnected() bool {
-	if s.VoiceConnection == nil {
-		return false
-	}
-
-	// Check if the connection is ready
-	return s.VoiceConnection.Ready
-}
-
-// GetGuildID returns the guild ID
-func (s *Session) GetGuildID() string {
-	return s.GuildID
-}
-
-// GetTextChannelID returns the text channel ID
-func (s *Session) GetTextChannelID() string {
-	return s.TextChannelID
-}
-
-// GetVoiceConnection returns the voice connection
-func (s *Session) GetVoiceConnection() *discordgo.VoiceConnection {
-	return s.VoiceConnection
-}
-
-// Finds the user's voice state in the guild.
-func findUserVoiceState(guild *discordgo.Guild, userID string) *discordgo.VoiceState {
-	for _, vs := range guild.VoiceStates {
-		if vs.UserID == userID {
-			return vs
-		}
 	}
 	return nil
 }

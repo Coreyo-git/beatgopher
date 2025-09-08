@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 type AudioStream struct {
@@ -82,41 +85,47 @@ func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 
 // Cleanup forcefully terminates the FFmpeg and yt-dlp processes and closes streams
 func (as *AudioStream) Cleanup() {
-	if as == nil {
+	// Get current working directory
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting working directory: %v", err)
 		return
 	}
 
-	// Close the stdout reader first to signal downstream consumers
-	if as.FfmpegStdout != nil {
-		as.FfmpegStdout.Close()
-	}
-	if as.Stdout != nil {
-		as.Stdout.Close()
-	}
-
-	// Terminate FFmpeg process
-	if as.Ffmpeg != nil && as.Ffmpeg.Process != nil {
-		log.Printf("Terminating FFmpeg process (PID: %d)", as.Ffmpeg.Process.Pid)
-		if err := as.Ffmpeg.Process.Kill(); err != nil {
-			log.Printf("Error killing FFmpeg process: %v", err)
-		}
-		// Wait for process to actually terminate (with timeout)
-		go func() {
-			as.Ffmpeg.Wait()
-			log.Printf("FFmpeg process terminated")
-		}()
+	// Read directory contents
+	files, err := os.ReadDir(wd)
+	if err != nil {
+		log.Printf("Error reading directory: %v", err)
+		return
 	}
 
-	// Terminate yt-dlp process
-	if as.Ytdlp != nil && as.Ytdlp.Process != nil {
-		log.Printf("Terminating yt-dlp process (PID: %d)", as.Ytdlp.Process.Pid)
-		if err := as.Ytdlp.Process.Kill(); err != nil {
-			log.Printf("Error killing yt-dlp process: %v", err)
+	// Look for fragment files (--Frag followed by numbers)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
 		}
-		// Wait for process to actually terminate (with timeout)
-		go func() {
-			as.Ytdlp.Wait()
-			log.Printf("yt-dlp process terminated")
-		}()
+		
+		filename := file.Name()
+		// Check if file matches fragment pattern (--Frag followed by digits)
+		if strings.HasPrefix(filename, "--Frag") && len(filename) > 6 {
+			// Check if the rest is numeric
+			suffix := filename[6:] // Remove "--Frag" prefix
+			isNumeric := true
+			for _, char := range suffix {
+				if char < '0' || char > '9' {
+					isNumeric = false
+					break
+				}
+			}
+			
+			if isNumeric {
+				fullPath := filepath.Join(wd, filename)
+				if err := os.Remove(fullPath); err != nil {
+					log.Printf("Error removing fragment file %s: %v", filename, err)
+				} else {
+					log.Printf("Removed fragment file: %s", filename)
+				}
+			}
+		}
 	}
 }

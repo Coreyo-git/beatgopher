@@ -4,19 +4,15 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/coreyo-git/beatgopher/discord"
-	"github.com/coreyo-git/beatgopher/player"
 	"github.com/coreyo-git/beatgopher/services"
 )
 
 func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ds := discord.NewSession(s, i.GuildID, i.ChannelID)
-	p := player.GetOrCreatePlayer(ds)
-
-	p.Lock()
-	defer p.Unlock()
+	session := discord.GetOrCreateSession(s, i)
 
 	var query string
 
@@ -32,21 +28,38 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	query = optionMap["query"].StringValue()
 
 	// Acknowledge command and reply to avoid timeout.
-	err := ds.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
+	err := session.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
 
 	if err != nil {
-		ds.InteractionRespond(i.Interaction, "Something went wrong while trying to respond.")
+		session.InteractionRespond(i.Interaction, "Something went wrong while trying to respond.")
 		log.Printf("Error responding to interaction: %v", err)
 	}
 
-	// Handles the search and gets the piped out audio stream
-	song, err := handleSearch(ds, i, query)
+	resultCh := make(chan services.YoutubeResult, 1)
+	errCh := make (chan error, 1)
 
-	if err != nil {
-		return
+	log.Printf("Received song request for: %v", query)
+	go func() {
+		// Handles the search and gets the piped out audio stream
+		song, err := handleSearch(session, i, query)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- song
+	}()
+
+	select {
+	case song := <-resultCh:
+		log.Printf("Adding song: %v", song.Title)
+		session.Player.AddSong(i, &song)
+	case err := <-errCh:
+		log.Printf("Search Error: %v", err)
+		session.FollowupMessage(i.Interaction, "Sorry I couldn't find that song or process the URL.")
+	case <- time.After(30 * time.Second):
+		log.Printf("Search timeout for query: %s", query)
+		session.FollowupMessage(i.Interaction, "Search timed out. Please try again.")
 	}
-
-	p.AddSong(i, &song)
 }
 
 func init() {
