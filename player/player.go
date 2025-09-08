@@ -39,77 +39,105 @@ type Player struct {
 	IsPlaying     bool
 	stop          chan bool
 	skip          chan bool
-	mu            sync.Mutex
+	mu            sync.RWMutex
 
-	OnSendEmbedMessage 	   func(song *services.YoutubeResult, content string) error
+	OnSendEmbedMessage     func(song *services.YoutubeResult, content string) error
 	OnCheckVoiceConnection func() bool
-	OnGetVoiceConnection func() *discordgo.VoiceConnection
+	OnGetVoiceConnection   func() *discordgo.VoiceConnection
 }
 
 func NewPlayer(
-		queue queue.QueueInterface, 
-		onSendEmbedMessage func(song *services.YoutubeResult, content string) error,
-		onCheckVoiceConnection func() bool,
-		onGetVoiceConnection func() *discordgo.VoiceConnection,
-		
-	) *Player {
+	queue queue.QueueInterface,
+	onSendEmbedMessage func(song *services.YoutubeResult, content string) error,
+	onCheckVoiceConnection func() bool,
+	onGetVoiceConnection func() *discordgo.VoiceConnection,
+) *Player {
 	return &Player{
 		CurrentStream: nil,
 		Queue:         queue,
 		IsPlaying:     false,
 		stop:          make(chan bool),
 		skip:          make(chan bool),
-		mu:            sync.Mutex{},
+		mu:            sync.RWMutex{},
 
-		OnSendEmbedMessage: onSendEmbedMessage,
+		OnSendEmbedMessage:     onSendEmbedMessage,
 		OnCheckVoiceConnection: onCheckVoiceConnection,
-		OnGetVoiceConnection: onGetVoiceConnection, 
+		OnGetVoiceConnection:   onGetVoiceConnection,
 	}
+}
+
+// Start begins the player's playback loop as a goroutine.
+// It should be called once per player.
+func (p *Player) Start() {
+	go p.playbackLoop()
 }
 
 // Adds a song to the queue and starts playback if the player is not already playing.
-func (player *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
-	player.Queue.Enqueue(song)
+func (p *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
+	p.Queue.Enqueue(song)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.IsPlaying {
+		log.Printf("Starting playback loop")
+		p.IsPlaying = true
+		go p.playbackLoop()
+	}
 }
 
-func (player *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult) {
+func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult) {
 	for j := 0; j < len(songs); j++ {
-		fmt.Printf("Adding song to queue: %v\n", &songs[j])
-		player.Queue.Enqueue(&songs[j])
+		fmt.Printf("Adding song to queue: %v", &songs[j])
+		p.Queue.Enqueue(&songs[j])
 	}
 }
 
-// handlePlaybackLoop is the main loop for playing songs from the queue.
-func (p *Player) handlePlaybackLoop(i *discordgo.InteractionCreate) {
+// playbackLoop is the main loop for playing songs from the queue.
+// It runs in its own goroutine.
+func (p *Player) playbackLoop() {
 	for {
-		song := p.Queue.Dequeue()
-		if song == nil {
-			break
-		}
-		p.OnSendEmbedMessage(song, "Playing!")
-
-		_, err := setupAudioOutput(song, p)
-		if err != nil {
-			log.Printf("Error in setupAudioOutput: %v", err)
-			continue // Skip this song and move to the next one
-		}
-
-		stream(i, p)
-
-		// After a song finishes, check if queue is empty and leave if so
-		if p.Queue.IsEmpty() {
-			log.Println("Queue is empty after song finished, leaving voice channel")
-			break
+		p.mu.RLock()
+		// if !p.IsPlaying{
+		// 	p.mu.RUnlock()
+		// }
+		select{
+		case <-p.stop:
+			p.mu.RUnlock()
+			return
+		default:
+			p.mu.RUnlock()
+			song := p.Queue.Dequeue()
+			if song == nil {
+				log.Printf("No more songs in queue.")
+				p.mu.Lock()
+				p.IsPlaying = false
+				p.mu.Unlock()
+				continue
+			}
+	
+			p.OnSendEmbedMessage(song, "Playing!")
+	
+			_, err := setupAudioOutput(song, p)
+			if err != nil {
+				log.Printf("Error in setupAudioOutput: %v", err)
+				continue // Skip this song and move to the next one
+			}
+	
+			log.Printf("Starting stream.")
+			stream(p)
 		}
 	}
-
-	p.Stop()
 }
 
 // Skip current song.
 func (p *Player) Skip() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.IsPlaying {
-		p.skip <- true
+		// Non-blocking send to skip channel
+		select {
+		case p.skip <- true:
+		default:
+		}
 		return true
 	}
 	return false
@@ -129,6 +157,12 @@ func (p *Player) Stop() {
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
+
+	// Signal stop to stream() to interrupt playback
+	select {
+	case p.stop <- true:
+	default:
+	}
 }
 
 // IsPlayerPlaying returns true if the player is currently playing
@@ -143,18 +177,8 @@ func (p *Player) GetQueue() queue.QueueInterface {
 	return p.Queue
 }
 
-// Lock locks the player's mutex.
-func (p *Player) Lock() {
-	p.mu.Lock()
-}
-
-// Unlock unlocks the player's mutex.
-func (p *Player) Unlock() {
-	p.mu.Unlock()
-}
-
 // Streams the audio to the voice channel.
-func stream(i *discordgo.InteractionCreate, p *Player) {
+func stream(p *Player) {
 	vc := p.OnGetVoiceConnection()
 	if vc == nil || !p.OnCheckVoiceConnection() {
 		log.Println("Voice connection is invalid or disconnected, aborting stream")
@@ -253,6 +277,12 @@ func stream(i *discordgo.InteractionCreate, p *Player) {
 				p.CurrentStream.Cleanup()
 			}
 			return
+		case <-p.skip:
+			log.Println("Song skipped by user")
+			if p.CurrentStream != nil {
+				p.CurrentStream.Cleanup()
+			}
+			return
 		case <-time.After(5 * time.Second):
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
 			timeouts++
@@ -272,22 +302,22 @@ func setupAudioOutput(result *services.YoutubeResult, p *Player) (io.ReadCloser,
 	// Consumer/Producer pipe to buffer to stream
 	pipeReader, pipeWriter := io.Pipe()
 
+	log.Printf("Starting audio stream for: %s", result.Title)
+	CurrentStream, err := services.NewAudioStream(result.URL)
+	if err != nil {
+		log.Printf("Error creating audio stream: %v", err)
+		pipeWriter.CloseWithError(err)
+		return nil, err
+	}
+
+	// Set the CurrentStream on the player for cleanup purposes before starting the copy goroutine
+	p.mu.Lock()
+	p.CurrentStream = CurrentStream
+	p.CurrentStream.Stdout = pipeReader
+	p.mu.Unlock()
+
 	go func() {
 		defer pipeWriter.Close()
-
-		log.Printf("Starting audio stream for: %s", result.Title)
-		CurrentStream, err := services.NewAudioStream(result.URL)
-		if err != nil {
-			log.Printf("Error creating audio stream: %v", err)
-			pipeWriter.CloseWithError(err)
-			return
-		}
-
-		// Set the CurrentStream on the player for cleanup purposes
-		p.mu.Lock()
-		p.CurrentStream = CurrentStream
-		p.CurrentStream.Stdout = pipeReader
-		p.mu.Unlock()
 
 		// Add buffering to smooth out the stream
 		bufferedReader := bufio.NewReaderSize(CurrentStream.FfmpegStdout, 64*1024) // 64KB buffer
