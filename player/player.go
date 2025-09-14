@@ -69,12 +69,6 @@ func NewPlayer(
 	}
 }
 
-// Start begins the player's playback loop as a goroutine.
-// It should be called once per player.
-func (p *Player) Start() {
-	go p.playbackLoop()
-}
-
 // Adds a song to the queue and starts playback if the player is not already playing.
 func (p *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeResult) {
 	p.Queue.Enqueue(song)
@@ -91,6 +85,10 @@ func (p *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeR
 
 func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.YoutubeResult) {
 	for j := 0; j < len(songs); j++ {
+		if j == 0 {
+			p.AddSong(i, &songs[j])
+			continue
+		}
 		fmt.Printf("Adding song to queue: %v", &songs[j])
 		p.Queue.Enqueue(&songs[j])
 	}
@@ -100,19 +98,12 @@ func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.Youtu
 // It runs in its own goroutine.
 func (p *Player) playbackLoop() {
 	for {
-		p.mu.RLock()
-		// if !p.IsPlaying{
-		// 	p.mu.RUnlock()
-		// }
 		select{
 		case <-p.stop:
-			p.mu.RUnlock()
 			return
 		default:
-			p.mu.RUnlock()
 			song := p.Queue.Dequeue()
 			if song == nil {
-				log.Printf("No more songs in queue.")
 				p.mu.Lock()
 				p.IsPlaying = false
 				p.mu.Unlock()
