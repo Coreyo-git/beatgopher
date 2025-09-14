@@ -44,6 +44,7 @@ type Player struct {
 	OnSendEmbedMessage     func(song *services.YoutubeResult, content string) error
 	OnCheckVoiceConnection func() bool
 	OnGetVoiceConnection   func() *discordgo.VoiceConnection
+	OnLeaveVoiceChannel	   func() 
 }
 
 func NewPlayer(
@@ -51,6 +52,7 @@ func NewPlayer(
 	onSendEmbedMessage func(song *services.YoutubeResult, content string) error,
 	onCheckVoiceConnection func() bool,
 	onGetVoiceConnection func() *discordgo.VoiceConnection,
+	onLeaveVoiceChannel func(),
 ) *Player {
 	return &Player{
 		CurrentStream: nil,
@@ -63,6 +65,7 @@ func NewPlayer(
 		OnSendEmbedMessage:     onSendEmbedMessage,
 		OnCheckVoiceConnection: onCheckVoiceConnection,
 		OnGetVoiceConnection:   onGetVoiceConnection,
+		OnLeaveVoiceChannel: 	onLeaveVoiceChannel,
 	}
 }
 
@@ -113,7 +116,7 @@ func (p *Player) playbackLoop() {
 				p.mu.Lock()
 				p.IsPlaying = false
 				p.mu.Unlock()
-				continue
+				return
 			}
 	
 			p.OnSendEmbedMessage(song, "Playing!")
@@ -159,6 +162,8 @@ func (p *Player) Stop() {
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
+
+	p.OnLeaveVoiceChannel()
 
 	// Signal stop to stream() to interrupt playback
 	select {
@@ -244,6 +249,11 @@ func stream(p *Player) {
 	// Reads raw PCM data from the stream
 	pcm := make([]int16, frameSize*channels)
 	for {
+		// Check if CurrentStream is still valid
+		if p.CurrentStream == nil {
+			log.Println("CurrentStream is nil, stopping playback")
+			return
+		}
 		// read full frame
 		err := binary.Read(p.CurrentStream.Stdout, binary.LittleEndian, &pcm)
 		if err != nil {

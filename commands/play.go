@@ -52,12 +52,13 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	select {
 	case song := <-resultCh:
 		log.Printf("Adding song: %v", song.Title)
-		session.Player.AddSong(i, &song)
-
 		err := session.JoinIfVoiceIsNotConnected(i)
 		if err != nil {
 			log.Printf("Error joining voice channel for guild: %v when using /play", i.GuildID)
 		}
+		session.Player.AddSong(i, &song)
+
+
 	case err := <-errCh:
 		log.Printf("Search Error: %v", err)
 		session.FollowupMessage(i.Interaction, "Sorry I couldn't find that song or process the URL.")

@@ -51,13 +51,14 @@ func playlistHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if err != nil {
 		return
 	} 
-	fmt.Println("Adding songs from playlist")
-	session.Player.AddSongs(i, songs)
 
 	err = session.JoinIfVoiceIsNotConnected(i)
 	if err != nil {
 		log.Printf("Error joining voice channel for guild: %v when using /playlist", i.GuildID)
 	}
+
+	fmt.Println("Adding songs from playlist")
+	session.Player.AddSongs(i, songs)
 }
 
 func init() {
