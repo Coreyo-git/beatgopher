@@ -81,6 +81,8 @@ func (p *Player) AddSong(i *discordgo.InteractionCreate, song *services.YoutubeR
 		log.Printf("Starting playback loop")
 		p.IsPlaying = true
 		go p.playbackLoop()
+	} else {
+		p.OnSendEmbedMessage(song, "Added to queue!")
 	}
 }
 
