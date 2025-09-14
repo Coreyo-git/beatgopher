@@ -34,6 +34,8 @@ type DiscordSessionInterface interface {
 	// LeaveVoiceChannel leaves the current voice channel
 	LeaveVoiceChannel()
 
+	JoinIfVoiceIsNotConnected(i *discordgo.InteractionCreate) error
+
 	// GetGuildID returns the guild ID
 	GetGuildID() string
 
@@ -87,6 +89,7 @@ func newSession(s *discordgo.Session, i *discordgo.InteractionCreate) *Session {
 		session.SendSongEmbed,
 		session.IsVoiceConnected,
 		session.GetVoiceConnection,
+		session.LeaveVoiceChannel,
 	)
 
 	return session
@@ -100,11 +103,6 @@ func GetOrCreateSession(s *discordgo.Session, i *discordgo.InteractionCreate) *S
 	if !exists {
 		session = newSession(s, i)
 		sessions[i.GuildID] = session
-	}
-
-	err := session.JoinVoiceChannel(i)
-	if err != nil {
-		log.Printf("Error joining voice channel for guild: %v", i.GuildID)
 	}
 
 	return session

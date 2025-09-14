@@ -54,12 +54,9 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		log.Printf("Adding song: %v", song.Title)
 		session.Player.AddSong(i, &song)
 
-		if !session.IsVoiceConnected() {
-			// join voice channel
-			err := session.JoinVoiceChannel(i)
-			if err != nil {
-				log.Printf("Error joining voice channel for guild: %v", i.GuildID)
-			}
+		err := session.JoinIfVoiceIsNotConnected(i)
+		if err != nil {
+			log.Printf("Error joining voice channel for guild: %v when using /play", i.GuildID)
 		}
 	case err := <-errCh:
 		log.Printf("Search Error: %v", err)

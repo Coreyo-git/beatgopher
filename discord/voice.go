@@ -75,3 +75,15 @@ func (s *Session) IsVoiceConnected() bool {
 	// Check if the connection is ready
 	return s.VoiceConnection.Ready
 }
+
+func (s *Session) JoinIfVoiceIsNotConnected(i *discordgo.InteractionCreate) error {
+	if !s.IsVoiceConnected() {
+		// join voice channel
+		err := s.JoinVoiceChannel(i)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return nil 
+}
