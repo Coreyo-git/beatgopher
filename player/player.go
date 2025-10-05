@@ -107,6 +107,7 @@ func (p *Player) playbackLoop() {
 				p.mu.Lock()
 				p.IsPlaying = false
 				p.mu.Unlock()
+				p.Stop()
 				return
 			}
 	
