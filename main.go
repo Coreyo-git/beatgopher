@@ -57,8 +57,20 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if i.Type == discordgo.InteractionApplicationCommand {
 		// Look for command with matching name in registry
 		if cmd, ok := commands.Commands[i.ApplicationCommandData().Name]; ok {
-			// if exists call relative handler
-			cmd.Handler(s, i)
+
+			// TODO implement context.Context at top level and pass it down to handlers
+			// to allow for better cancellation and timeout handling
+			
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+                        log.Printf("Recovered from panic in command %s: %v", i.ApplicationCommandData().Name, r)
+                    }
+				}()
+
+				// if exists call relative handler
+				cmd.Handler(s, i)
+			}()
 		}
 	}
 }
