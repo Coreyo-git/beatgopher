@@ -1,49 +1,34 @@
-# ---- Builder ----
+# ---- Builder Stage ----
 FROM golang:1.25-alpine AS builder
-
-# Install runtime deps.
-# ca-certificates is needed for making HTTPS reqs.
-# python3 is needed for yt-dlp.
-# git is needed for golang modules
 RUN apk add --no-cache ca-certificates ffmpeg curl python3 git opus-dev gcc build-base
 
-# yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
     chmod a+rx /usr/local/bin/yt-dlp
 
-# Install air
-RUN go install github.com/air-verse/air@latest
-
 WORKDIR /app
-
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy the rest.
 COPY . .
 
-# Build
-# CGO self container binary
-# ldflags makes the binary file smaller
+# Production build
 ENV CGO_CFLAGS="-O2"
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /beatgopher ./main.go
 
-# ---- Final ----
+# ---- Debug Stage ----
+FROM builder AS debug
+# Install Delve
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+# Ensure CGO is enabled debug build
+ENV CGO_ENABLED=1
+EXPOSE 2345
+
+CMD ["dlv", "debug", "--listen=:2345", "--headless=true", "--api-version=2", "main.go"]
+
+# ---- Final Stage ----
 FROM alpine:latest
-
-# Install runtime deps.
-# ca-certificates is needed for making HTTPS reqs.
 RUN apk add --no-cache ca-certificates ffmpeg curl python3 opus
-
-# yt-dlp download.
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
     chmod a+rx /usr/local/bin/yt-dlp
-
-# Copy binary from build.
 COPY --from=builder /beatgopher /beatgopher
-
-# Environment variables will be provided at runtime via Jenkins
-# No need to copy .env file anymore
-
 CMD ["/beatgopher"]

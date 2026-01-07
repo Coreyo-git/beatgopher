@@ -39,3 +39,4 @@ tmp/
 
 # Environment variables
 .env
+__debug*

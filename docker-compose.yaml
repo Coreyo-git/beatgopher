@@ -3,11 +3,16 @@ services:
     container_name: beatgopher-dev
     build:
       context: .
-      target: builder
+      target: debug
     volumes:
       - .:/app
       - ~/.cache/go-build:/root/.cache/go-build
+    ports:
+      - "2345:2345" # Delve
+    security_opt:
+      - "seccomp:unconfined"
+    cap_add:
+      - SYS_PTRACE
     env_file:
       - .env
     working_dir: /app
-    command: ["air"]
