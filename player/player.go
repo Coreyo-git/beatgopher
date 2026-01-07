@@ -104,10 +104,7 @@ func (p *Player) playbackLoop() {
 		default:
 			song := p.Queue.Dequeue()
 			if song == nil {
-				p.mu.Lock()
-				p.IsPlaying = false
-				p.mu.Unlock()
-				p.Stop()
+				p.Stop();
 				return
 			}
 	
@@ -145,23 +142,11 @@ func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Clean up current stream if it exists
-	if p.CurrentStream != nil {
-		p.CurrentStream.Cleanup()
-		p.CurrentStream = nil
-	}
-
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
-
+	p.stop <- true
 	p.OnLeaveVoiceChannel()
-
-	// Signal stop to stream() to interrupt playback
-	select {
-	case p.stop <- true:
-	default:
-	}
 }
 
 // IsPlayerPlaying returns true if the player is currently playing
@@ -184,7 +169,7 @@ func stream(p *Player) {
 		return
 	}
 
-	if !vc.Ready {
+	if vc.Status != 3 {
 		log.Println("Voice connection not ready, waiting...")
 		time.Sleep(100 * time.Millisecond) // Increased wait time
 
@@ -197,13 +182,6 @@ func stream(p *Player) {
 
 	vc.Speaking(true)
 	defer vc.Speaking(false)
-
-	// Ensure cleanup happens when stream function exits
-	defer func() {
-		if p.CurrentStream != nil {
-			p.CurrentStream.Cleanup()
-		}
-	}()
 
 	const (
 		channels  int = 2
@@ -277,15 +255,9 @@ func stream(p *Player) {
 		case <-p.stop:
 			log.Println("Playback stopped by user")
 			// Clean up the current stream
-			if p.CurrentStream != nil {
-				p.CurrentStream.Cleanup()
-			}
 			return
 		case <-p.skip:
 			log.Println("Song skipped by user")
-			if p.CurrentStream != nil {
-				p.CurrentStream.Cleanup()
-			}
 			return
 		case <-time.After(5 * time.Second):
 			log.Printf("Timeout sending opus packet (frame %d)", framesProcessed)
@@ -342,7 +314,6 @@ func setupAudioOutput(result *services.YoutubeResult, p *Player) (io.ReadCloser,
 		if err := CurrentStream.Ffmpeg.Wait(); err != nil {
 			log.Printf("ffmpeg process error: %v", err)
 		}
-
 		log.Println("Audio stream cleanup completed")
 	}()
 

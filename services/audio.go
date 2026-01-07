@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 type AudioStream struct {
@@ -32,6 +29,7 @@ func NewAudioStream(url string) (*AudioStream, error) {
 }
 
 func (as *AudioStream) Close() {
+	log.Printf("Closing audio stream")
 	if as.Ytdlp != nil && as.Ytdlp.Process != nil {
 		as.Ytdlp.Process.Kill()
 	}
@@ -81,51 +79,4 @@ func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 	}
 
 	return ffmpegStdout, ytdlp, ffmpeg, nil
-}
-
-// Cleanup forcefully terminates the FFmpeg and yt-dlp processes and closes streams
-func (as *AudioStream) Cleanup() {
-	// Get current working directory
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Printf("Error getting working directory: %v", err)
-		return
-	}
-
-	// Read directory contents
-	files, err := os.ReadDir(wd)
-	if err != nil {
-		log.Printf("Error reading directory: %v", err)
-		return
-	}
-
-	// Look for fragment files (--Frag followed by numbers)
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		
-		filename := file.Name()
-		// Check if file matches fragment pattern (--Frag followed by digits)
-		if strings.HasPrefix(filename, "--Frag") && len(filename) > 6 {
-			// Check if the rest is numeric
-			suffix := filename[6:] // Remove "--Frag" prefix
-			isNumeric := true
-			for _, char := range suffix {
-				if char < '0' || char > '9' {
-					isNumeric = false
-					break
-				}
-			}
-			
-			if isNumeric {
-				fullPath := filepath.Join(wd, filename)
-				if err := os.Remove(fullPath); err != nil {
-					log.Printf("Error removing fragment file %s: %v", filename, err)
-				} else {
-					log.Printf("Removed fragment file: %s", filename)
-				}
-			}
-		}
-	}
 }
