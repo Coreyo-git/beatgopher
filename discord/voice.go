@@ -1,7 +1,10 @@
 package discord
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -10,6 +13,10 @@ import (
 
 func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
 	g, err := s.Session.State.Guild(i.GuildID)
+	// Create a context that automatically cancels after 5 seconds
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	defer cancel()
 
 	if err != nil {
 		return fmt.Errorf("could not find guild: %w", err)
@@ -22,7 +29,7 @@ func (s *Session) JoinVoiceChannel(i *discordgo.InteractionCreate) error {
 	}
 
 	// Join the user's voice channel.
-	vc, err := s.Session.ChannelVoiceJoin(s.GuildID, vs.ChannelID, false, true)
+	vc, err := s.Session.ChannelVoiceJoin(ctx, s.GuildID, vs.ChannelID, false, true)
 	if err != nil {
 		s.FollowupMessage(i.Interaction, "Error joining voice channel")
 		return fmt.Errorf("could not join voice channel: %w", err)
@@ -39,8 +46,18 @@ func (s *Session) LeaveVoiceChannel() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Create a context that automatically cancels after 5 seconds
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	defer cancel()
+
 	if s.VoiceConnection != nil {
-		s.VoiceConnection.Disconnect()
+		err := s.VoiceConnection.Disconnect(ctx)
+		if err != nil {
+        log.Printf("Failed to disconnect cleanly: %v", err)
+        // If it times out, the 'err' will be context.DeadlineExceeded
+    }
+	
 		s.VoiceConnection = nil
 	}
 }
@@ -73,7 +90,7 @@ func (s *Session) IsVoiceConnected() bool {
 	}
 
 	// Check if the connection is ready
-	return s.VoiceConnection.Ready
+	return s.VoiceConnection.Status == 3
 }
 
 func (s *Session) JoinIfVoiceIsNotConnected(i *discordgo.InteractionCreate) error {
