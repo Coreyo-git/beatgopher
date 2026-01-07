@@ -26,7 +26,7 @@ EXPOSE 2345
 CMD ["dlv", "debug", "--listen=:2345", "--headless=true", "--api-version=2", "main.go"]
 
 # ---- Final Stage ----
-FROM alpine:latest
+FROM alpine:latest AS release
 RUN apk add --no-cache ca-certificates ffmpeg curl python3 opus
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
     chmod a+rx /usr/local/bin/yt-dlp

@@ -23,18 +23,19 @@ pipeline {
         }
         
         stage('Build Docker Image') {
-            steps {
-                echo 'Building Docker image...'
-                script {
-                    // Build the Docker image
-                    def image = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
-                    
-                    // Also tag as latest
-                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
-                }
-            }
-        }
-        
+			steps {
+				echo 'Building Production Docker image...'
+				script {
+					// --target release to get production image
+					// --pull to ensure latest base images
+					sh "docker build --target release --pull -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+					
+					// Also tag as latest
+					sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+				}
+			}
+		}
+		
         stage('Stop Existing Container') {
             steps {
                 echo 'Stopping existing container...'
