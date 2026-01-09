@@ -48,11 +48,15 @@ func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 	ytdlp := exec.Command("yt-dlp", ytdlpArgs...)
 
 	ffmpegArgs := []string{
-		"-i", "pipe:0", // input from stdin
+		// "-reconnect", "1",
+		// "-reconnect_streamed", "1",
+		// "-reconnect_delay_max", "5", 	// Max wait 5s before retrying
+		"-i", "pipe:0", 				// input from stdin
+		// "-vn", 							// no video
 		"-f", "s16le",
 		"-ar", "48000",
 		"-ac", "2",
-		"pipe:1", // output to stdout
+		"pipe:1", 						// output to stdout
 	}
 	ffmpeg := exec.Command("ffmpeg", ffmpegArgs...)
 

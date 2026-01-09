@@ -58,8 +58,8 @@ func NewPlayer(
 		CurrentStream: nil,
 		Queue:         queue,
 		IsPlaying:     false,
-		stop:          make(chan bool),
-		skip:          make(chan bool),
+		stop:          make(chan bool, 1),
+		skip:          make(chan bool, 1),
 		mu:            sync.RWMutex{},
 
 		OnSendEmbedMessage:     onSendEmbedMessage,
@@ -97,29 +97,43 @@ func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.Youtu
 // playbackLoop is the main loop for playing songs from the queue.
 // It runs in its own goroutine.
 func (p *Player) playbackLoop() {
+	defer p.cleanupPlayback()
+
 	for {
-		select{
+		select {
 		case <-p.stop:
+			log.Println("Playback loop received stop signal")
 			return
 		default:
 			song := p.Queue.Dequeue()
 			if song == nil {
-				p.Stop();
+				log.Println("Queue empty, ending playback loop")
 				return
 			}
-	
+
 			p.OnSendEmbedMessage(song, "Playing!")
-	
+
 			_, err := setupAudioOutput(song, p)
 			if err != nil {
 				log.Printf("Error in setupAudioOutput: %v", err)
 				continue // Skip this song and move to the next one
 			}
-	
+
 			log.Printf("Starting stream.")
 			stream(p)
 		}
 	}
+}
+
+// cleanupPlayback handles cleanup when playback ends naturally (queue empty)
+// This avoids the deadlock that would occur if playbackLoop called Stop() directly
+func (p *Player) cleanupPlayback() {
+	p.mu.Lock()
+	p.IsPlaying = false
+	p.mu.Unlock()
+
+	log.Println("Playback cleanup: leaving voice channel")
+	p.OnLeaveVoiceChannel()
 }
 
 // Skip current song.
@@ -145,7 +159,15 @@ func (p *Player) Stop() {
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
-	p.stop <- true
+
+	// Non-blocking send to stop channel to avoid deadlock
+	// when called from within playbackLoop
+	select {
+	case p.stop <- true:
+	default:
+		// Channel already has a signal or no receiver waiting
+	}
+
 	p.OnLeaveVoiceChannel()
 }
 
