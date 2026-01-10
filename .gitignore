@@ -32,7 +32,8 @@ tmp/
 
 # IDE and editor specific files
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 *.sublime-project
 *.sublime-workspace
 .DS_Store

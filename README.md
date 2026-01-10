@@ -149,31 +149,14 @@ The Dockerfile provides multiple build targets:
 docker build --target test -t beatgopher-test . && docker run --rm beatgopher-test
 ```
 
-**Debug with Delve:**
-```sh
-docker-compose up dev
-# Delve listens on port 2345
-```
-
 ### Debugging with VS Code
 
-The debug stage runs Delve on port 2345. Add this to your `.vscode/launch.json`:
+1. **Start the dev container:**
+   ```sh
+   docker-compose up dev
+   ```
 
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Attach to Docker",
-      "type": "go",
-      "request": "attach",
-      "mode": "remote",
-      "port": 2345,
-      "host": "127.0.0.1"
-    }
-  ]
-}
-```
+2. **Attach VS Code** - Press F5 or use "Run and Debug" → "Remote Docker" to attach to the running container. The launch configuration is included in `.vscode/launch.json`.
 
 ### Running Tests Locally
 
