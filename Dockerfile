@@ -14,6 +14,11 @@ COPY . .
 ENV CGO_CFLAGS="-O2"
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /beatgopher ./main.go
 
+# ---- Test Stage ----
+FROM builder AS test
+ENV CGO_ENABLED=1
+CMD ["go", "test", "-v", "./..."]
+
 # ---- Debug Stage ----
 FROM builder AS debug
 # Install Delve
