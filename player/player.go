@@ -158,8 +158,8 @@ func (p *Player) Stop() {
 
 // IsPlayerPlaying returns true if the player is currently playing
 func (p *Player) IsPlayerPlaying() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.IsPlaying
 }
 
