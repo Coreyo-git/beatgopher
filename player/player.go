@@ -156,6 +156,16 @@ func (p *Player) IsPlayerPlaying() bool {
 	return p.IsPlaying
 }
 
+// cleanupCurrentStream kills the yt-dlp and ffmpeg processes for the current stream
+func (p *Player) cleanupCurrentStream() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.CurrentStream != nil {
+		p.CurrentStream.Close()
+		p.CurrentStream = nil
+	}
+}
+
 // GetQueue returns the queue interface
 func (p *Player) GetQueue() queue.QueueInterface {
 	return p.Queue
@@ -163,6 +173,9 @@ func (p *Player) GetQueue() queue.QueueInterface {
 
 // Streams the audio to the voice channel.
 func stream(p *Player) {
+	// Ensure processes are killed when stream exits for any reason
+	defer p.cleanupCurrentStream()
+
 	vc := p.OnGetVoiceConnection()
 	if vc == nil || !p.OnCheckVoiceConnection() {
 		log.Println("Voice connection is invalid or disconnected, aborting stream")
@@ -254,7 +267,6 @@ func stream(p *Player) {
 			}
 		case <-p.stop:
 			log.Println("Playback stopped by user")
-			// Clean up the current stream
 			return
 		case <-p.skip:
 			log.Println("Song skipped by user")
