@@ -44,9 +44,11 @@ chmod a+rx /usr/local/bin/yt-dlp
 brew install ffmpeg opus yt-dlp
 ```
 
-**Alpine Linux:**
+**Windows (WSL):**
 ```sh
-apk add ffmpeg opus-dev gcc build-base python3
+# Run inside WSL (Ubuntu)
+sudo apt update
+sudo apt install ffmpeg libopus-dev build-essential
 curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
 chmod a+rx /usr/local/bin/yt-dlp
 ```
