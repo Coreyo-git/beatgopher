@@ -110,28 +110,27 @@ func GetOrCreateSession(s *discordgo.Session, i *discordgo.InteractionCreate) *S
 
 // HandleBotDisconnection cleans up session state when the bot gets disconnected from a guild
 func HandleBotDisconnection(guildID string) {
+	// Acquire map lock, get and remove the session
 	sessionsMutex.Lock()
-	defer sessionsMutex.Unlock()
-
-	if session, exists := sessions[guildID]; exists {
-		session.mu.Lock()
-		defer session.mu.Unlock()
-		log.Printf("Cleaning up player state for disconnected guild: %s", guildID)
-
-		// Reset player state
-		session.Queue.Clear()
-		session.Player.Stop()
-
-		// Clear voice connection reference
-		if session.GetVoiceConnection() != nil {
-			session.VoiceConnection = nil
-		}
-
-		// Remove the player from the map since it's no longer valid
-		delete(sessions, guildID)
-
-		log.Printf("Session cleanup completed for guild: %s", guildID)
+	session, exists := sessions[guildID]
+	if !exists {
+		sessionsMutex.Unlock()
+		return
 	}
+	// Remove from map
+	delete(sessions, guildID)
+	sessionsMutex.Unlock()
+
+	log.Printf("Cleaning up player state for disconnected guild: %s", guildID)
+
+	// Clear queue under session lock
+	session.mu.Lock()
+	session.Queue.Clear()
+	session.mu.Unlock()
+
+	session.Player.Stop()
+
+	log.Printf("Session cleanup completed for guild: %s", guildID)
 }
 
 func (s *Session) RemoveFromQueue(song *services.YoutubeResult) bool {

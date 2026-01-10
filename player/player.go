@@ -160,12 +160,11 @@ func (p *Player) Stop() {
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
 
-	// Non-blocking send to stop channel to avoid deadlock
-	// when called from within playbackLoop
+	// Non-blocking send to stop channel - if nothing is receiving,
+	// the playback loop has already exited, so we just move on
 	select {
 	case p.stop <- true:
 	default:
-		// Channel already has a signal or no receiver waiting
 	}
 
 	p.OnLeaveVoiceChannel()
@@ -173,9 +172,19 @@ func (p *Player) Stop() {
 
 // IsPlayerPlaying returns true if the player is currently playing
 func (p *Player) IsPlayerPlaying() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.IsPlaying
+}
+
+// cleanupCurrentStream kills the yt-dlp and ffmpeg processes for the current stream
+func (p *Player) cleanupCurrentStream() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.IsPlaying
+	if p.CurrentStream != nil {
+		p.CurrentStream.Close()
+		p.CurrentStream = nil
+	}
 }
 
 // GetQueue returns the queue interface
@@ -185,6 +194,9 @@ func (p *Player) GetQueue() queue.QueueInterface {
 
 // Streams the audio to the voice channel.
 func stream(p *Player) {
+	// Ensure processes are killed when stream exits for any reason
+	defer p.cleanupCurrentStream()
+
 	vc := p.OnGetVoiceConnection()
 	if vc == nil || !p.OnCheckVoiceConnection() {
 		log.Println("Voice connection is invalid or disconnected, aborting stream")
@@ -241,12 +253,7 @@ func stream(p *Player) {
 	// Reads raw PCM data from the stream
 	pcm := make([]int16, frameSize*channels)
 	for {
-		// Check if CurrentStream is still valid
-		if p.CurrentStream == nil {
-			log.Println("CurrentStream is nil, stopping playback")
-			return
-		}
-		// read full frame
+		// read full frame (EOF/error will be returned when stream is closed during cleanup)
 		err := binary.Read(p.CurrentStream.Stdout, binary.LittleEndian, &pcm)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -276,7 +283,6 @@ func stream(p *Player) {
 			}
 		case <-p.stop:
 			log.Println("Playback stopped by user")
-			// Clean up the current stream
 			return
 		case <-p.skip:
 			log.Println("Song skipped by user")

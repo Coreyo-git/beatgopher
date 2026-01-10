@@ -21,7 +21,17 @@ pipeline {
                 checkout scm
             }
         }
-        
+
+        stage('Run Tests') {
+            steps {
+                echo 'Running tests...'
+                script {
+                    sh "docker build --target test -t ${DOCKER_IMAGE}-test ."
+                    sh "docker run --rm ${DOCKER_IMAGE}-test"
+                }
+            }
+        }
+
         stage('Build Docker Image') {
 			steps {
 				echo 'Building Production Docker image...'
@@ -113,11 +123,14 @@ pipeline {
         }
         
         always {
-            // Clean up old images to save space (keep last 5 builds)
+            // Clean up test image and old images to save space
             script {
                 sh '''
-                    # Remove old images (keep last 5)
-                    docker images ${DOCKER_IMAGE} --format "table {{.Tag}}" | grep -E "^[0-9]+$" | sort -nr | tail -n +6 | xargs -I {} docker rmi ${DOCKER_IMAGE}:{} || true
+                    # Remove test image
+                    docker rmi ${DOCKER_IMAGE}-test || true
+
+                    # Remove old images (keep last 2)
+                    docker images ${DOCKER_IMAGE} --format "table {{.Tag}}" | grep -E "^[0-9]+$" | sort -nr | tail -n +3 | xargs -I {} docker rmi ${DOCKER_IMAGE}:{} || true
                 '''
             }
         }
