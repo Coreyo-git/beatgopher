@@ -4,7 +4,7 @@
         {
             "label": "docker-compose-dev",
             "type": "shell",
-            "command": "docker-compose up dev",
+            "command": "docker-compose up dev --build",
             "isBackground": true,
             "problemMatcher": {
                 "pattern": {
