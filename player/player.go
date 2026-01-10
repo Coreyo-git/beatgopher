@@ -145,7 +145,14 @@ func (p *Player) Stop() {
 	// Clear the queue
 	p.Queue = queue.NewQueue()
 	p.IsPlaying = false
-	p.stop <- true
+
+	// Non-blocking send to stop channel - if nothing is receiving,
+	// the playback loop has already exited, so we just move on
+	select {
+	case p.stop <- true:
+	default:
+	}
+
 	p.OnLeaveVoiceChannel()
 }
 
@@ -232,12 +239,7 @@ func stream(p *Player) {
 	// Reads raw PCM data from the stream
 	pcm := make([]int16, frameSize*channels)
 	for {
-		// Check if CurrentStream is still valid
-		if p.CurrentStream == nil {
-			log.Println("CurrentStream is nil, stopping playback")
-			return
-		}
-		// read full frame
+		// read full frame (EOF/error will be returned when stream is closed during cleanup)
 		err := binary.Read(p.CurrentStream.Stdout, binary.LittleEndian, &pcm)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
