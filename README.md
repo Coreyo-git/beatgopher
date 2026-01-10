@@ -151,12 +151,15 @@ docker build --target test -t beatgopher-test . && docker run --rm beatgopher-te
 
 ### Debugging with VS Code
 
-1. **Start the dev container:**
-   ```sh
-   docker-compose up dev
-   ```
+Three launch configurations are included in `.vscode/launch.json`:
 
-2. **Attach VS Code** - Press F5 or use "Run and Debug" → "Remote Docker" to attach to the running container. The launch configuration is included in `.vscode/launch.json`.
+| Configuration | Description |
+|---------------|-------------|
+| **Docker: Debug** | One-click: builds container, attaches debugger, cleans up on stop |
+| **Docker: Attach** | Attach to an already-running dev container |
+| **Local: Debug** | Debug locally (requires CGO and Opus libraries installed) |
+
+**Quick start:** Select "Docker: Debug" and press F5. VS Code will start the container, wait for Delve, and attach automatically.
 
 ### Running Tests Locally
 
