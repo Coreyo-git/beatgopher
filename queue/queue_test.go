@@ -2,15 +2,14 @@ package queue
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/coreyo-git/beatgopher/services"
 )
 
 func TestQueueOperations(t *testing.T) {
-	q := &Queue{
-		songs: []*services.YoutubeResult{},
-	}
+	q := NewQueue()
 
 	// Test IsEmpty on an empty queue
 	if !q.IsEmpty() {
@@ -321,12 +320,11 @@ func TestQueueWithFilledQueue(t *testing.T) {
 
 func TestConcurrentQueueOperations(t *testing.T) {
 	q := NewQueue()
+	var wg sync.WaitGroup
 
-	// Test concurrent enqueue and remove operations
-	done := make(chan bool, 2)
-
+	wg.Add(2)
 	// Goroutine 1: Add songs
-	go func() {
+	wg.Go(func() {
 		for i := 0; i < 10; i++ {
 			testSong := &services.YoutubeResult{
 				ID:        fmt.Sprintf("conc%d", i),
@@ -338,13 +336,11 @@ func TestConcurrentQueueOperations(t *testing.T) {
 			}
 			q.Enqueue(testSong)
 		}
-		done <- true
-	}()
+		wg.Done()
+	})
 
-	// Goroutine 2: Remove songs
-	go func() {
-		for i := 0; i < 5; i++ {
-			// Try to remove a song - may or may not exist due to timing
+	wg.Go(func() {
+		for i := 10; i < 20; i++ {
 			testSong := &services.YoutubeResult{
 				ID:        fmt.Sprintf("conc%d", i),
 				Channel:   "Test Channel",
@@ -353,18 +349,154 @@ func TestConcurrentQueueOperations(t *testing.T) {
 				URL:       fmt.Sprintf("https://youtube.com/watch?v=conc%d", i),
 				Thumbnail: fmt.Sprintf("https://img.youtube.com/vi/conc%d/default.jpg", i),
 			}
-			q.RemoveFromQueue(testSong)
+			q.Enqueue(testSong)
 		}
-		done <- true
-	}()
+		wg.Done()
+	})
 
-	// Wait for both goroutines to complete
-	<-done
-	<-done
+	wg.Wait()
 
-	// Verify queue is in a valid state (size should be reasonable)
+	// Test Size and no duplicate ID's
 	size := q.Size()
-	if size < 0 || size > 10 {
-		t.Errorf("Expected queue size between 0 and 10, got %d", size)
+	if size != 20 {
+		t.Errorf("Expected 20 songs, actually got %d", size)
 	}
+
+	songs := q.GetSongs()
+	seen := make(map[string]bool)
+	for _, song := range songs {
+		if seen[song.ID] {
+			t.Errorf("Duplicate song ID Found: %s", song.ID)
+		}
+		seen[song.ID] = true
+	}
+
+	q.Clear()
+
+	// Add songs to test dequeue concurrency
+	numSongs := 30
+
+	for i := 0; i < numSongs; i++ {
+		testSong := &services.YoutubeResult{
+			ID:        fmt.Sprintf("conc%d", i),
+			Channel:   "Test Channel",
+			Title:     fmt.Sprintf("Test Song %d", i),
+			Duration:  "3:00",
+			URL:       fmt.Sprintf("https://youtube.com/watch?v=conc%d", i),
+			Thumbnail: fmt.Sprintf("https://img.youtube.com/vi/conc%d/default.jpg", i),
+		}
+		q.Enqueue(testSong)
+	}
+
+	songsRemoved := make([]services.YoutubeResult, numSongs)
+	wg.Add(3)
+	// Goroutine 2: Remove songs
+	wg.Go(func() {
+		for i := 0; i < 10; i++ {
+			song := q.Dequeue()
+			songsRemoved[i] = *song
+		}
+		wg.Done()
+	})
+	wg.Go(func() {
+		for i := 10; i < 20; i++ {
+			song := q.Dequeue()
+			songsRemoved[i] = *song
+		}
+		wg.Done()
+	})
+	wg.Go(func() {
+		for i := 20; i < 30; i++ {
+			song := q.Dequeue()
+			songsRemoved[i] = *song
+		}
+		wg.Done()
+	})
+
+	wg.Wait()
+	// Verify slice is in a valid state
+	size = q.Size()
+	if size != 0 {
+		t.Errorf("Expected queue size to be 0 but was actually %d", size)
+	}
+
+	lengthOfSongsRemoved := len(songsRemoved)
+	if lengthOfSongsRemoved != 30 {
+		t.Errorf("Expected number of songs removed was %d, actual: %d", numSongs, lengthOfSongsRemoved)
+	}
+
+	seen = make(map[string]bool)
+	for _, song := range songsRemoved {
+		if seen[song.ID] {
+			t.Errorf("Duplicate song ID Found in songsRemoved slice: %s", song.ID)
+		}
+		seen[song.ID] = true
+	}
+}
+
+func TestQueueIsEmptyOnClear(t *testing.T) {
+	q := NewQueue()
+	song1 := services.YoutubeResult{
+		ID:        "1",
+		Channel:   "Channel 1",
+		Title:     "Song 1",
+		Duration:  "1:00",
+		URL:       "Song1.com",
+		Thumbnail: "Song1Thumbnail.link",
+	}
+	song2 := services.YoutubeResult{
+		ID:        "2",
+		Channel:   "Channel 2",
+		Title:     "Song 2",
+		Duration:  "2:00",
+		URL:       "Song2.com",
+		Thumbnail: "Song2Thumbnail.link",
+	}
+	song3 := services.YoutubeResult{
+		ID:        "3",
+		Channel:   "Channel 3",
+		Title:     "Song 3",
+		Duration:  "3:00",
+		URL:       "Song3.com",
+		Thumbnail: "Song3Thumbnail.link",
+	}
+
+	q.Enqueue(&song1)
+	q.Enqueue(&song2)
+	q.Enqueue(&song3)
+
+	q.Clear()
+
+	if !q.IsEmpty() {
+		t.Errorf("Expected queue to be empty after being clear.")
+	}
+}
+
+func TestPeekOnEmptyQueue(t *testing.T) {
+	q := NewQueue()
+
+	result := q.Peek()
+
+	if result != nil {
+		t.Errorf("Expected queue peek to return nil on empty queue")
+	}
+}
+
+// hasDuplicates checks if a slice of comparable elements has any duplicates.
+func hasDuplicates[T comparable](slice []T) bool {
+	// A map is used as a set, with the element type as the key and
+	// an empty struct{} as the value for memory efficiency.
+	seen := make(map[T]struct{})
+
+	for _, value := range slice {
+		if _, exists := seen[value]; exists {
+			// A duplicate was found.
+			return true
+		}
+		// Mark the element as seen.
+		seen[value] = struct{}{}
+	}
+
+	// No duplicates were found after checking all elements.
+	return false
 }
