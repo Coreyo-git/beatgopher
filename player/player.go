@@ -1,7 +1,6 @@
 package player
 
 import (
-	"fmt"
 	"log"
 	"sync"
 
@@ -39,7 +38,7 @@ type Player struct {
 	OnSendEmbedMessage     func(song *services.YoutubeResult, content string) error
 	OnCheckVoiceConnection func() bool
 	OnGetVoiceConnection   func() *discordgo.VoiceConnection
-	OnLeaveVoiceChannel	   func() 
+	OnLeaveVoiceChannel    func()
 }
 
 func NewPlayer(
@@ -53,14 +52,14 @@ func NewPlayer(
 		CurrentStream: nil,
 		Queue:         queue,
 		IsPlaying:     false,
-		stop:          make(chan bool),
-		skip:          make(chan bool),
+		stop:          make(chan bool, 1),
+		skip:          make(chan bool, 1),
 		mu:            sync.RWMutex{},
 
 		OnSendEmbedMessage:     onSendEmbedMessage,
 		OnCheckVoiceConnection: onCheckVoiceConnection,
 		OnGetVoiceConnection:   onGetVoiceConnection,
-		OnLeaveVoiceChannel: 	onLeaveVoiceChannel,
+		OnLeaveVoiceChannel:    onLeaveVoiceChannel,
 	}
 }
 
@@ -84,7 +83,7 @@ func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.Youtu
 			p.AddSong(i, &songs[j])
 			continue
 		}
-		fmt.Printf("Adding song to queue: %v", &songs[j])
+		log.Printf("Adding song to queue: %v", &songs[j])
 		p.Queue.Enqueue(&songs[j])
 	}
 }
@@ -93,25 +92,30 @@ func (p *Player) AddSongs(i *discordgo.InteractionCreate, songs []services.Youtu
 // It runs in its own goroutine.
 func (p *Player) playbackLoop() {
 	for {
-		select{
+		select {
 		case <-p.stop:
 			return
 		default:
 			song := p.Queue.Dequeue()
 			if song == nil {
-				p.Stop();
+				p.Stop()
 				return
 			}
-	
+
 			p.OnSendEmbedMessage(song, "Playing!")
-	
+
 			_, err := setupAudioOutput(song, p)
 			if err != nil {
 				log.Printf("Error in setupAudioOutput: %v", err)
 				continue // Skip this song and move to the next one
 			}
-	
+
+			
 			log.Printf("Starting stream.")
+			select {
+			case <-p.skip:
+			default:
+			}
 			stream(p)
 		}
 	}
@@ -172,5 +176,3 @@ func (p *Player) cleanupCurrentStream() {
 func (p *Player) GetQueue() queue.QueueInterface {
 	return p.Queue
 }
-
-
