@@ -2,13 +2,13 @@
 
 package player
 
-import(
-	"encoding/binary"
+import (
 	"bufio"
+	"encoding/binary"
 	"io"
-	"time"
-	"log"
 	"layeh.com/gopus"
+	"log"
+	"time"
 
 	"github.com/coreyo-git/beatgopher/services"
 )
@@ -63,11 +63,19 @@ func stream(p *Player) {
 	statsTicker := time.NewTicker(5 * time.Second)
 	defer statsTicker.Stop()
 
+	done := make(chan struct{})
+	defer close(done)
+
 	go func() {
-		for range statsTicker.C {
-			elapsed := time.Since(startTime)
-			log.Printf("Audio Stats - Frames: %d, Timeouts: %d, Errors: %d, Duration: %v",
-				framesProcessed, timeouts, errors, elapsed)
+		for { 
+			select {
+			case <-statsTicker.C:
+				elapsed := time.Since(startTime)
+				log.Printf("Audio Stats - Frames: %d, Timeouts: %d, Errors: %d, Duration: %v",
+					framesProcessed, timeouts, errors, elapsed)
+			case <- done:
+				return
+			}
 		}
 	}()
 
