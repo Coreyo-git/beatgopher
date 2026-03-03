@@ -28,6 +28,7 @@ func createTestPlayer(q queue.QueueInterface) *player.Player {
 func TestPlayerAddSong(t *testing.T) {
 	q := queue.NewQueue()
 	player := createTestPlayer(q)
+	player.IsPlaying = true
 
 	testSong := &services.YoutubeResult{
 		ID:        "test-song-id",
