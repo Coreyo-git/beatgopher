@@ -35,7 +35,7 @@ type QueueInterface interface {
 
 // FIFO queue for a single guild
 type Queue struct {
-	mu sync.Mutex // Protects queue from 
+	mu sync.Mutex 
 	songs []*services.YoutubeResult
 }
 
