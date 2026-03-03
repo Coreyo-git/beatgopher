@@ -29,7 +29,8 @@ func stopHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		message := notInChannelReplies[rng.Intn(len(notInChannelReplies))]
 		session.InteractionRespond(i.Interaction, message)
-	return}
+		return
+	}
 
 	session.Player.Stop()
 
