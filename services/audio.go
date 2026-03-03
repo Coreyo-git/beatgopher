@@ -76,6 +76,7 @@ func setupAudioStream(url string) (io.ReadCloser, *exec.Cmd, *exec.Cmd, error) {
 
 	if err := ffmpeg.Start(); err != nil {
 		// Clean up yt-dlp since it's already running
+		ytdlpStdout.Close()
 		ytdlp.Process.Kill()
 		return nil, nil, nil, fmt.Errorf("error starting ffmpeg: %w", err)
 	}
