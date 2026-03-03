@@ -24,7 +24,7 @@ func showqueueHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	// Get the page number from the command options.
 	page := 1
-	if i.ApplicationCommandData().Options != nil {
+	if i.ApplicationCommandData().Options != nil && len(i.ApplicationCommandData().Options) > 0 {
 		page = int(i.ApplicationCommandData().Options[0].IntValue())
 	}
 

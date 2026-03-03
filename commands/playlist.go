@@ -27,15 +27,17 @@ func playlistHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		optionMap[opt.Name] = opt
 	}
 
-	if(optionMap["total"] != nil) {
+	if (optionMap["total"] != nil) {
 		total = optionMap["total"].IntValue()
 	}
 
-	if(optionMap["random"] != nil) {
+	if (optionMap["random"] != nil) {
 		random = optionMap["random"].BoolValue()
 	}
 
-	query = optionMap["url"].StringValue()
+	if (optionMap["url"] != nil) {
+		query = optionMap["url"].StringValue()
+	}
 	
 	// Acknowledge command and reply to avoid timeout.
 	err := session.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))
@@ -57,7 +59,7 @@ func playlistHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		log.Printf("Error joining voice channel for guild: %v when using /playlist", i.GuildID)
 	}
 
-	fmt.Println("Adding songs from playlist")
+	log.Println("Adding songs from playlist")
 	session.Player.AddSongs(i, songs)
 }
 
