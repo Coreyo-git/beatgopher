@@ -25,7 +25,9 @@ func playHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		optionMap[opt.Name] = opt
 	}
 
-	query = optionMap["query"].StringValue()
+	if optionMap["query"] != nil {
+		query = optionMap["query"].StringValue()
+	}
 
 	// Acknowledge command and reply to avoid timeout.
 	err := session.InteractionRespond(i.Interaction, fmt.Sprintf("Received your request for `%s`!", query))

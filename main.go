@@ -60,12 +60,27 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 			// TODO implement context.Context at top level and pass it down to handlers
 			// to allow for better cancellation and timeout handling
-			
+
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
-                        log.Printf("Recovered from panic in command %s: %v", i.ApplicationCommandData().Name, r)
-                    }
+						err := s.InteractionRespond(i.Interaction,  
+							&discordgo.InteractionResponse{
+								Type: discordgo.InteractionResponseChannelMessageWithSource,
+								Data: &discordgo.InteractionResponseData{
+									Content: "An error occurred while processing your command.",
+									Flags:   discordgo.MessageFlagsEphemeral, // optional: only visible to the user
+								},
+							})
+						if err != nil {
+							s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+								Content: "An error occurred while processing your command.",
+								Flags:   discordgo.MessageFlagsEphemeral,
+							})
+						}
+
+						log.Printf("Recovered from panic in command %s: %v", i.ApplicationCommandData().Name, r)
+					}
 				}()
 
 				// if exists call relative handler

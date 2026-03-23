@@ -106,6 +106,8 @@ func GetYoutubePlaylistInfo(playlistURL string, total int64, randomizeSongs bool
 		result, err := parseYoutubeOutput([]byte(line))
 		if err != nil {
 			log.Printf("Failed to parse line: %v", line)
+			i++
+			continue
 		}
 		results = append(results, result)
 		i++

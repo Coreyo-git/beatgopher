@@ -2,71 +2,8 @@ package mocks
 
 import (
 	"github.com/bwmarrin/discordgo"
-	"github.com/coreyo-git/beatgopher/queue"
 	"github.com/coreyo-git/beatgopher/services"
 )
-
-// MockQueue is a mock implementation of QueueInterface for testing
-type MockQueue struct {
-	songs []*services.YoutubeResult
-}
-
-func NewMockQueue() *MockQueue {
-	return &MockQueue{
-		songs: []*services.YoutubeResult{},
-	}
-}
-
-func (mq *MockQueue) Enqueue(song *services.YoutubeResult) {
-	mq.songs = append(mq.songs, song)
-}
-
-func (mq *MockQueue) Dequeue() *services.YoutubeResult {
-	if len(mq.songs) == 0 {
-		return nil
-	}
-	song := mq.songs[0]
-	mq.songs = mq.songs[1:]
-	return song
-}
-
-func (mq *MockQueue) RemoveFromQueue(song *services.YoutubeResult) bool {
-	for i, s := range mq.songs {
-		if s.ID == song.ID {
-			mq.songs = append(mq.songs[:i], mq.songs[i+1:]...)
-			return true
-		}
-	}
-	return false
-}
-
-func (mq *MockQueue) IsEmpty() bool {
-	return len(mq.songs) == 0
-}
-
-func (mq *MockQueue) Peek() *services.YoutubeResult {
-	if len(mq.songs) == 0 {
-		return nil
-	}
-	return mq.songs[0]
-}
-
-func (mq *MockQueue) Size() int {
-	return len(mq.songs)
-}
-
-func (mq *MockQueue) GetSongs() []*services.YoutubeResult {
-	songsCopy := make([]*services.YoutubeResult, len(mq.songs))
-	copy(songsCopy, mq.songs)
-	return songsCopy
-}
-
-func (mq *MockQueue) Clear() {
-	mq.songs = []*services.YoutubeResult{}
-}
-
-// Verify that MockQueue implements QueueInterface at compile time
-var _ queue.QueueInterface = (*MockQueue)(nil)
 
 // MockDiscordSession is a mock implementation of DiscordSessionInterface for testing
 type MockDiscordSession struct {
