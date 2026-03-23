@@ -24,7 +24,7 @@ func stream(p *Player) {
 		return
 	}
 
-	if vc.Status != 3 {
+	if !vc.Ready {
 		log.Println("Voice connection not ready, waiting...")
 		time.Sleep(100 * time.Millisecond) // Increased wait time
 
